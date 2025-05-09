@@ -1,0 +1,65 @@
+## Load in Data
+```{r}
+library(dada2)
+botero_fastqs <- list.files("./data/2014_botero/fastq", 
+                                      full.names = TRUE, 
+                                      recursive = TRUE, 
+                                      pattern = ".fastq")
+
+fnFs <- sort(botero_fastqs)
+sample.names <- sapply(strsplit(basename(fnFs), ".fastq"), `[`, 1)
+plotQualityProfile(fnFs[1:2])
+```
+## Filter and trim Reads
+```{r, eval=FALSE}
+filtFs <- file.path("./data/2014_botero/fastq", "filtered", 
+                    paste0(sample.names, "filt.fastq.gz"))
+names(filtFs) <- sample.names
+
+out <- filterAndTrim(fnFs, filtFs, truncLen=240,
+              maxN=0, maxEE=2, truncQ=2, rm.phix=TRUE,
+              compress=TRUE, multithread=TRUE)
+```
+Filtered and trimmed reads results
+```{r}
+head(out)
+```
+
+```{r}
+errF <- learnErrors(filtFs, multithread=TRUE)
+plotErrors(errF, nominalQ=TRUE)
+```
+
+
+```{r}
+dadaFs <- dada(filtFs, err=errF, multithread=TRUE)
+
+seqtab <- makeSequenceTable(dadaFs)
+dim(seqtab)
+seqtab.nochim <- removeBimeraDenovo(seqtab, method="consensus", multithread=TRUE, verbose=TRUE)
+
+dim(seqtab.nochim)
+sum(seqtab.nochim)/sum(seqtab)
+```
+
+Tracking reads through processing
+```{r}
+getN <- function(x) sum(getUniques(x))
+track <- cbind(out, sapply(dadaFs, getN), sapply(mergers, getN), rowSums(seqtab.nochim))
+# If processing a single sample, remove the sapply calls: e.g. replace sapply(dadaFs, getN) with getN(dadaFs)
+colnames(track) <- c("input", "filtered", "denoisedF", "denoisedR", "merged", "nonchim")
+rownames(track) <- sample.names
+head(track)
+```
+
+```{r}
+taxa <- assignTaxonomy(seqtab.nochim, 
+                       "./data/silva_nr99_v138.2_toSpecies_trainset.fa.gz", 
+                       multithread=TRUE, tryRC=TRUE)
+
+ps_dada2 <- phyloseq(otu_table(seqtab.nochim, taxa_are_rows=FALSE), 
+               sample_data(samples_df), 
+               tax_table(taxa))
+
+saveRDS(ps_dada2, file = "./data_processed/botero_2014/ps_dada2.rds")
+```

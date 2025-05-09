@@ -1,0 +1,59 @@
+---
+title: "botero_analysis"
+author: "Sean Lu"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+## Loading in libraries
+```{r}
+library("phyloseq")
+library("ggplot2")     
+library("dplyr")        
+library("tibble")
+library("ggpubr")
+```
+
+```{r}
+ps_dada2 <- readRDS("data_processed/botero_2014/ps_dada2.rds")
+ps_ms <- readRDS("data_processed/botero_2014/ps_metascope_priors_trimmed.rds")
+
+ps_dada2_oral <- subset_samples(ps_dada2, Sample_type == "Oropharynx")
+ps_ms_oral <- subset_samples(ps_ms, Sample_type == "Oropharynx")
+```
+
+```{r}
+p1 <- ggplot(psmelt(ps_dada2), aes(x = Sample, y = Abundance, fill = Genus)) + 
+  geom_bar(position ="fill",stat = "identity") + 
+  theme(legend.position = "none")
+
+```
+
+## Plotting Alpha Diversity
+```{r}
+p2_1 <- plot_richness(ps_dada2_oral, measures=c("Observed", "Chao1", "ACE", "Shannon", "Simpson", "InvSimpson", "Fisher"), x = "status") + 
+  stat_compare_means(label = "p.signif", label.x = 1.5, comparisons = list(c("Control", "TB"))) + 
+  geom_boxplot()
+
+ps_ms_oral <- subset_samples(ps_ms_oral, Sample_type == "Oropharynx")
+p2_2 <- plot_richness(ps_ms, measures=c("Observed", "Chao1", "ACE", "Shannon", "Simpson", "InvSimpson", "Fisher"), x = "status") + 
+  stat_compare_means(label = "p.signif", label.x = 1.5, comparisons = list(c("Control", "TB"))) + 
+  geom_boxplot()
+
+p2_1 + p2_2
+```
+
+```{r}
+ps_ms.ord <- ordinate(ps_ms, "PCoA", "bray")
+plot_ordination(ps_ms, ps_ms.ord, type="samples", color="status", shape="Sample_type", title="Samples") + 
+  geom_point(size=3) + 
+  stat_ellipse(
+    aes(linetype=Sample_type))
+
+ps_dada2.ord <- ordinate(ps_dada2, "PCoA", "bray")
+plot_ordination(ps_dada2, ps_dada2.ord, type="samples", color="status", shape="Sample_type", title="Samples") + 
+  geom_point(size=3) + 
+  stat_ellipse(
+    aes(linetype=Sample_type))
+
+```

@@ -1,0 +1,340 @@
+---
+title: "Botero Analysis Animalcules"
+author: "Sean Lu"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(phyloseq)
+library(animalcules)
+library(tidyverse)
+library(LegATo)
+
+```
+
+# Loading in MetaScope and dada2 results
+
+```{r cars}
+# MetaScope
+ms_counts_table <- read.csv("/projects/f_wj183_1/work/Sean/botero_16S/analysis/counts_table.csv", 
+                            row.names = 1)
+ms_tax_table <- read.csv("/projects/f_wj183_1/work/Sean/botero_16S/analysis/tax_table.csv", 
+                            row.names = 1)
+ms_metadata <- read.csv("/projects/f_wj183_1/work/Sean/botero_16S/analysis/metadata.csv", 
+                            row.names = 1)
+
+MAE_ms <- create_formatted_MAE(counts_dat = ms_counts_table,
+                               tax_dat = ms_tax_table,
+                               metadata_dat = ms_metadata[row.names(ms_metadata) %in% colnames(ms_counts_table),])
+
+# DADA2
+ps_dada2 <- readRDS("/projects/f_wj183_1/work/Sean/botero_16S/analysis/ps_dada2.rds")
+dada_counts_table <- otu_table(ps_dada2) |> t() |> as.data.frame()
+ordered_counts <- dada_counts_table[order(row.names(dada_counts_table)),]
+row.names(ordered_counts) <- c(1:nrow(ordered_counts)) |> as.character()
+dada_tax_table <- tax_table(ps_dada2) |> as.data.frame()
+ordered_tax <- dada_tax_table[order(row.names(dada_tax_table)),]
+colnames(ordered_tax) <- tolower(colnames(ordered_tax))
+row.names(ordered_tax) <- c(1:nrow(ordered_tax)) |> as.character()
+ordered_tax <- dplyr::mutate(ordered_tax, species = ifelse(is.na(species), 
+                                                           "Unknown Species", 
+                                                           paste0(genus, " ", species)))
+ordered_tax <- dplyr::mutate(ordered_tax, genus = ifelse(is.na(genus), 
+                                                           "Unknown Genus", 
+                                                           genus))
+
+MAE_dada <- create_formatted_MAE(counts_dat = ordered_counts,
+                               tax_dat = ordered_tax,
+                               metadata_dat = ms_metadata[row.names(ms_metadata) %in% colnames(dada_counts_table),])
+```
+
+
+# Data Summary
+
+```{r pressure, echo=FALSE}
+group_vars <- c("status", "Sample_type")
+get_summary_table(MAE_dada, group_vars) |>
+  knitr::kable(caption = "DADA2 Summary Table", label = NA)
+
+get_summary_table(MAE_ms, group_vars) |>
+  knitr::kable(caption = "MetaScope Summary Table", label = NA)
+```
+
+```{r}
+p1_1 <- relabu_barplot(MAE_ms,
+    tax_level = "species",
+    sort_by = "conditions",
+    sample_conditions = c("status", "Sample_type"),
+    show_legend = TRUE
+)
+p1_1
+
+p1_2 <- relabu_barplot(MAE_dada,
+    tax_level = "species",
+    sort_by = "conditions",
+    sample_conditions = c("status", "Sample_type"),
+    show_legend = TRUE
+)
+p1_2
+
+p1_3 <- relabu_barplot(MAE_ms,
+    tax_level = "genus",
+    sort_by = "conditions",
+    sample_conditions = c("status", "Sample_type"),
+    show_legend = TRUE
+)
+p1_3
+
+p1_4 <- relabu_barplot(MAE_dada,
+    tax_level = "genus",
+    sort_by = "conditions",
+    sample_conditions = c("status", "Sample_type"),
+    show_legend = TRUE
+)
+p1_4
+```
+
+```{r}
+p <- relabu_boxplot(MAE_dada,
+    tax_level = "genus",
+    organisms = c("Streptococcus", "Staphylococcus", "Cutibacterium"),
+    condition =  "status",
+    datatype = "logcpm"
+)
+p
+p <- relabu_boxplot(MAE_dada,
+    tax_level = "species",
+    organisms = c("Streptococcus mitis", "Staphylococcus aureus", "Streptococcus salivarius",
+                  "Mycobacterium tuberculosis", "Cutibacteirum acnes", "Prevotella melaninogenica"),
+    condition =  "status",
+    datatype = "logcpm"
+)
+p
+```
+
+```{r}
+# Separate MAEs by Sample_type
+MAE_ms_oral <- 
+  mae_pick_samples(MAE_ms, 
+                   isolate_samples = dplyr::filter(as.data.frame(colData(MAE_ms)),
+                                                   Sample_type == "Oropharynx") |>
+                     row.names())
+MAE_dada_oral <- 
+  mae_pick_samples(MAE_dada, 
+                   isolate_samples = dplyr::filter(as.data.frame(colData(MAE_dada)),
+                                                   Sample_type == "Oropharynx") |>
+                     row.names())
+
+alpha_div_boxplot(
+    MAE = MAE_ms_oral,
+    tax_level = "species",
+    condition = "status",
+    alpha_metric = "shannon"
+)
+alpha_div_boxplot(
+    MAE = MAE_dada_oral,
+    tax_level = "species",
+    condition = "status",
+    alpha_metric = "shannon"
+)
+
+do_alpha_div_test(
+    MAE = MAE_dada_oral,
+    tax_level = "species",
+    condition = "status",
+    alpha_metric = "shannon",
+    alpha_stat = "T-test"
+)
+```
+This is weird, these results show dada2 also has statistical significance, but when using phyloseq there is no alpha diversity significance between groups
+
+```{r}
+dimred_pca(MAE_ms,
+    tax_level = "species",
+    color = "Sample_type",
+    shape = "status",
+    pcx = 1,
+    pcy = 2,
+    datatype = "logcpm"
+)
+
+dimred_pcoa(MAE_ms,
+    tax_level = "species",
+    color = "Sample_type",
+    shape = "status",
+    axx = 1,
+    axy = 2,
+    method = "bray"
+)
+result$plot
+```
+
+
+```{r}
+differential_abundance(MAE_dada_oral,
+    tax_level = "species",
+    input_da_condition = c("status", "Sample_type"),
+    min_num_filter = 2,
+    input_da_padj_cutoff = 0.5,
+    method = "limma"
+)
+```
+
+
+```{r}
+differential_abundance(MAE_ms_oral,
+    tax_level = "species",
+    input_da_condition = c("status"),
+    min_num_filter = 2,
+    input_da_padj_cutoff = 0.5,
+    method = "limma"
+)
+```
+
+
+```{r}
+ms_counts_table <- read.csv("/projects/f_wj183_1/work/Sean/botero_16S/analysis/counts_table.csv", 
+                            row.names = 1)
+ms_tax_table <- read.csv("/projects/f_wj183_1/work/Sean/botero_16S/analysis/tax_table.csv", 
+                            row.names = 1)
+ms_metadata <- read.csv("/projects/f_wj183_1/work/Sean/botero_16S/analysis/metadata.csv", 
+                            row.names = 1)
+
+otu_mat <- ms_counts_table %>%
+  tibble::column_to_rownames("TaxonomyID") 
+tax_mat <- ms_tax_table %>% 
+  tibble::column_to_rownames("TaxonomyID")
+samples_df <- ms_metadata %>% 
+  tibble::column_to_rownames("Run_ID") 
+
+otu_mat <- as.matrix(ms_counts_table)
+tax_mat <- as.matrix(ms_tax_table)
+
+OTU = otu_table(otu_mat, taxa_are_rows = TRUE)
+TAX = tax_table(tax_mat)
+samples = sample_data(ms_metadata)
+
+ps <- phyloseq(OTU, TAX, samples)
+ps_oral <- subset_samples(ps, Sample_type == "Oropharynx")
+total = median(sample_sums(ps_oral))
+standf = function(x, t=total) round(t * (x / sum(x)))
+ps_norm = transform_sample_counts(ps_oral, standf)
+
+library(ggpubr)
+p2_1 <- plot_richness(ps_norm, measures=c("Observed", "Shannon", "Simpson", "InvSimpson"), x = "status") + 
+  stat_compare_means(label = "p.signif", label.x = 1.5, comparisons = list(c("Control", "TB"))) + 
+  geom_boxplot()
+p2_1
+
+p2_2 <- plot_richness(ps_norm, measures=c("Chao1", "Shannon"), x = "status")
+p2_3 <- plot_richness(ps_norm, measures=c("Observed", "Chao1", "ACE", "Shannon", "Simpson", "InvSimpson", "Fisher"), x = "status")+ 
+  stat_compare_means(label = "p.signif", label.x = 1.5, comparisons = list(c("Control", "TB"))) + 
+  geom_boxplot()
+p2_3
+```
+
+```{r}
+ps_dada2
+ps_dada2_oral <- subset_samples(ps_dada2, Sample_type == "Oropharynx")
+total = median(sample_sums(ps_dada2_oral))
+standf = function(x, t=total) round(t * (x / sum(x)))
+ps_dada2_norm = transform_sample_counts(ps_dada2_oral, standf)
+p2_3 <- plot_richness(ps_dada2_norm, measures=c("Observed", "Chao1", "ACE", "Shannon", "Simpson", "InvSimpson", "Fisher"), x = "status")+ 
+  stat_compare_means(label = "p.signif", label.x = 1.5, comparisons = list(c("Control", "TB"))) + 
+  geom_boxplot()
+p2_3
+```
+
+```{r}
+ps_dada2_nasal <- subset_samples(ps_dada2, Sample_type == "Nasal")
+total = median(sample_sums(ps_dada2_nasal))
+standf = function(x, t=total) round(t * (x / sum(x)))
+ps_dada2_norm = transform_sample_counts(ps_dada2_nasal, standf)
+p3_1 <- plot_richness(ps_dada2_norm, measures=c("Observed", "Chao1", "ACE", "Shannon", "Simpson", "InvSimpson", "Fisher"), x = "status")+ 
+  stat_compare_means(label = "p.signif", label.x = 1.5, comparisons = list(c("Control", "TB"))) + 
+  geom_boxplot()
+p3_1
+
+ps_ms_nasal <- subset_samples(ps, Sample_type == "Nasal")
+total = median(sample_sums(ps_ms_nasal))
+standf = function(x, t=total) round(t * (x / sum(x)))
+ps_ms_norm = transform_sample_counts(ps_ms_nasal, standf)
+p3_2 <- plot_richness(ps_ms_norm, measures=c("Observed", "Chao1", "ACE", "Shannon", "Simpson", "InvSimpson", "Fisher"), x = "status")+ 
+  stat_compare_means(label = "p.signif", label.x = 1.5, comparisons = list(c("Control", "TB"))) + 
+  geom_boxplot()
+p3_2
+```
+
+```{r}
+library("DESeq2")
+deseq_ms = phyloseq_to_deseq2(ps_oral, ~ status)
+deseq_ms = estimateSizeFactors(deseq_ms, type = 'poscounts')
+deseq_ms = estimateSizeFactors(deseq_ms, type = 'ratio')
+deseq_ms = DESeq(deseq_ms, test="Wald", fitType="parametric")
+
+res = results(deseq_ms, cooksCutoff = FALSE)
+alpha = 0.05
+#sigtab = res[which(res$padj < alpha), ]
+sigtab = res
+sigtab = cbind(as(sigtab, "data.frame"), as(tax_table(ps_oral)[rownames(sigtab), ], "matrix"))
+head(sigtab)
+dim(sigtab)
+
+library("ggplot2")
+# Phylum order
+x = tapply(sigtab$log2FoldChange, sigtab$phylum, function(x) max(x))
+x = sort(x, TRUE)
+sigtab$phylum = factor(as.character(sigtab$phylum), levels=names(x))
+# Genus order
+x = tapply(sigtab$log2FoldChange, sigtab$species, function(x) max(x))
+x = sort(x, TRUE)
+sigtab$species = factor(as.character(sigtab$species), levels=names(x))
+ggplot(sigtab, aes(x=species, y=log2FoldChange, color=phylum)) + geom_point(size=6) + 
+  theme(axis.text.x = element_text(angle = -90, hjust = 0, vjust=0.5))
+
+library(EnhancedVolcano)
+res <- cbind(res, as(tax_table(ps_oral)[rownames(res), ], "matrix"))
+EnhancedVolcano(res,
+  lab = res$species,
+  x = 'log2FoldChange',
+  y = 'pvalue')
+
+```
+
+```{r}
+library("DESeq2")
+deseq_ms = phyloseq_to_deseq2(ps_dada2_oral, ~ status)
+deseq_ms = estimateSizeFactors(deseq_ms, type = 'poscounts')
+deseq_ms = estimateSizeFactors(deseq_ms, type = 'ratio')
+deseq_ms = DESeq(deseq_ms, test="Wald", fitType="parametric")
+
+res = results(deseq_ms, cooksCutoff = FALSE)
+alpha = 0.05
+#sigtab = res[which(res$padj < alpha), ]
+sigtab = res
+sigtab = cbind(as(sigtab, "data.frame"), as(tax_table(ps_dada2_oral)[rownames(sigtab), ], "matrix"))
+head(sigtab)
+dim(sigtab)
+
+library("ggplot2")
+# Phylum order
+x = tapply(sigtab$log2FoldChange, sigtab$Genus, function(x) max(x))
+x = sort(x, TRUE)
+sigtab$Genus = factor(as.character(sigtab$Genus), levels=names(x))
+# Genus order
+x = tapply(sigtab$log2FoldChange, sigtab$Species, function(x) max(x))
+x = sort(x, TRUE)
+sigtab$Species = factor(as.character(sigtab$Species), levels=names(x))
+ggplot(sigtab, aes(x=Species, y=log2FoldChange, color=Genus)) + geom_point(size=6) + 
+  theme(axis.text.x = element_text(angle = -90, hjust = 0, vjust=0.5))
+
+library(EnhancedVolcano)
+res <- cbind(res, as(tax_table(ps_dada2_oral)[rownames(res), ], "matrix"))
+EnhancedVolcano(res,
+  lab = res$Species,
+  x = 'log2FoldChange',
+  y = 'pvalue')
+
+```
