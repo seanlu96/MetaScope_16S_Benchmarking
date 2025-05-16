@@ -2,30 +2,204 @@
 title: "botero_analysis"
 author: "Sean Lu"
 date: "`r Sys.Date()`"
-output: html_document
+output: pdf_document
+editor_options:
+  chunk_output_type: console
 ---
+```{r knitr options, include = FALSE}
+knitr::opts_chunk$set(cache=TRUE, cache.path=".cache/")
+```
 
-## Loading in libraries
-```{r}
+## Setup
+```{r Loading in Libraries}
 library("phyloseq")
 library("ggplot2")     
 library("dplyr")        
 library("tibble")
 library("ggpubr")
+library("phylosmith")
 ```
 
-```{r}
+## Load in processed Data
+```{r, eval=TRUE, include=TRUE}
 ps_dada2 <- readRDS("data_processed/botero_2014/ps_dada2.rds")
 ps_ms <- readRDS("data_processed/botero_2014/ps_metascope_priors_trimmed.rds")
 
 ps_dada2_oral <- subset_samples(ps_dada2, Sample_type == "Oropharynx")
 ps_ms_oral <- subset_samples(ps_ms, Sample_type == "Oropharynx")
+ps_dada2_nasal <- subset_samples(ps_dada2, Sample_type == "Nasal")
+ps_ms_nasal <- subset_samples(ps_ms, Sample_type == "Nasal")
+```
+
+## Plotting relative abundances of MetaScope and DADA2
+### Species Level Abundances
+```{r}
+dada2_df <- psmelt(ps_dada2) |> 
+  dplyr::mutate(Species = ifelse(is.na(Species), NA, paste0(Genus, " ", Species)))
+dada2_df$pipeline = "DADA2"
+colnames(dada2_df)
+
+ms_df <- psmelt(ps_ms)
+ms_df$pipeline = "MetaScope"
+ms_df$kingdom = "Bacteria"
+ms_df <- ms_df |>
+  dplyr::relocate(kingdom, .before = phylum)
+colnames(ms_df) <- c("OTU", "Sample", "Abundance", "Sequencing_Type", "Patient",
+                     "Sample_type", "status", "Kingdom", "Phylum", "Class", 
+                     "Order", "Family", "Genus", "Species", "pipeline")
+
+merged_df <- rbind(dada2_df, ms_df)
+
+
+relab_species <- ggplot(merged_df, aes(x = Sample, y = Abundance, fill = Species)) + 
+  geom_bar(position ="fill",stat = "identity") + 
+  facet_grid(cols = c(vars(Sample_type), vars(status), vars(pipeline)), scales = "free_x")
+relab_species + 
+  theme(legend.position = "none",
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank())
+relab_species_legend <- get_legend(relab_species)
+as_ggplot(relab_species_legend)
+
+```
+
+```{r Saving stacked species relab figures, eval=FALSE, include=FALSE}
+ggsave(file="figures/p1_stacked_relab.svg", 
+       plot=relab_species + theme(legend.position = "none",
+           axis.text.x=element_blank(),
+           axis.ticks.x=element_blank()),
+       device = "svg", width=7.5, height=4, units="in",
+       dpi = 300)
+ggsave(file="figures/p1_legend.svg", plot=as_ggplot(relab_species_legend),
+       device = "svg", width=7.5, height=4, units="in",
+       dpi = 300)
+```
+
+### Genus Level Abundances
+```{r, Genus level Abundances}
+relab_genus <- ggplot(merged_df, aes(x = Sample, y = Abundance, fill = Genus)) + 
+  geom_bar(position ="fill",stat = "identity") + 
+  facet_grid(cols = c(vars(Sample_type), vars(status), vars(pipeline)), scales = "free_x")
+relab_genus + 
+  theme(legend.position = "none",
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank())
+relab_genus_legend <- get_legend(relab_genus)
+as_ggplot(relab_genus_legend)
+```
+
+```{r Saving stacked genus relab figures, eval=FALSE, include=FALSE}
+ggsave(file="figures/p2_stacked_relab_genus.svg", 
+       plot=relab_genus + theme(legend.position = "none",
+           axis.text.x=element_blank(),
+           axis.ticks.x=element_blank()),
+       device = "svg", width=7.5, height=4, units="in",
+       dpi = 300)
+ggsave(file="figures/p2_legend.svg", plot=as_ggplot(relab_genus_legend),
+       device = "svg", width=7.5, height=4, units="in",
+       dpi = 300)
+```
+
+### Phylum Level Abundances
+```{r, Phylum level Abundances}
+relab_phylum <- ggplot(merged_df, aes(x = Sample, y = Abundance, fill = Phylum)) + 
+  geom_bar(position ="fill",stat = "identity") + 
+  facet_grid(cols = c(vars(Sample_type), vars(status), vars(pipeline)), scales = "free_x")
+relab_phylum + 
+  theme(legend.position = "none",
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank())
+relab_phylum_legend <- get_legend(relab_phylum)
+as_ggplot(relab_phylum_legend)
+```
+
+```{r Saving stacked phylum relab figures, eval=FALSE, include=FALSE}
+ggsave(file="figures/p3_stacked_relab_phylum.svg", 
+       plot=relab_genus + theme(legend.position = "none",
+           axis.text.x=element_blank(),
+           axis.ticks.x=element_blank()),
+       device = "svg", width=7.5, height=4, units="in",
+       dpi = 300)
+ggsave(file="figures/p3_legend.svg", plot=as_ggplot(relab_phylum_legend),
+       device = "svg", width=7.5, height=4, units="in",
+       dpi = 300)
+```
+
+## Heatmaps
+```{r}
+plot_heatmap(ps_ms, sample.label="Sample_type")
+plot_heatmap(ps_dada2, sample.label="Sample_type")
+```
+
+## Filtered abundance barplots
+```{r}
+high_abund_dada2 <- merged_df |> 
+  dplyr::filter(Abundance > 1000) |>
+  dplyr::filter(pipeline == "DADA2")
+
+high_abund_ms <- merged_df |> 
+  dplyr::filter(Abundance > 1000) |>
+  dplyr::filter(pipeline == "MetaScope")
+
+select_species_both <- unique(high_abund_dada2$Species[high_abund_dada2$Species %in% high_abund_ms$Species])
+select_species_dada2 <- unique(high_abund_dada2$Species[!(high_abund_dada2$Species %in% high_abund_ms$Species)])
+select_species_ms <- unique(high_abund_ms$Species[!(high_abund_ms$Species %in% high_abund_dada2$Species)])
+
+ms_unique_species <- merged_df |> 
+  dplyr::filter(Species %in% select_species_ms) |>
+  ggplot(aes(fill=Sample_type, y=Abundance, x=Species)) + 
+  geom_bar(position="dodge", stat="identity") + 
+  facet_grid(vars(pipeline), vars(status)) + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+ms_unique_species
+  
+dada2_unique_species <- merged_df |> 
+  dplyr::filter(Species %in% select_species_dada2) |>
+  ggplot(aes(fill=Sample_type, y=Abundance, x=Species)) + 
+  geom_bar(position="dodge", stat="identity") + 
+  facet_grid(vars(pipeline), vars(status)) + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+dada2_unique_species
+
+high_abund_species <- merged_df |> 
+  dplyr::filter(Species %in% select_species_both) |>
+  ggplot(aes(fill=Sample_type, y=Abundance, x=Species)) + 
+  geom_bar(position="dodge", stat="identity") + 
+  facet_grid(vars(pipeline), vars(status)) + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+high_abund_species
+```
+
+```{r Saving high abundance plots, eval=FALSE, include=FALSE}
+ggsave(file="figures/p4_ms_unique_species.svg", plot=ms_unique_species,
+       device = "svg", width=7.5, height=4, units="in",
+       dpi = 300)
+
+ggsave(file="figures/p5_dada2_unique_species.svg", plot=dada2_unique_species,
+       device = "svg", width=7.5, height=4, units="in",
+       dpi = 300)
+
+ggsave(file="figures/p6_high_abund_species", plot=high_abund_species,
+       device = "svg", width=7.5, height=4, units="in",
+       dpi = 300)
 ```
 
 ```{r}
-p1 <- ggplot(psmelt(ps_dada2), aes(x = Sample, y = Abundance, fill = Genus)) + 
-  geom_bar(position ="fill",stat = "identity") + 
-  theme(legend.position = "none")
+abundance_heatmap(ps_ms, classification = 'species',
+                   treatment = c("status","Sample_type"), transformation = 'relative_abundance')
+abundance_heatmap(ps_dada2, classification = 'Species',
+                   treatment = c("status","Sample_type"), transformation = 'relative_abundance')
+
+
+phylogeny_profile(ps_ms, classification = 'family', 
+  treatment = c("status","Sample_type"), merge = TRUE, 
+  relative_abundance = TRUE)
+
+filtered_ms <- taxa_filter(ps_ms, frequency = 0.8)
+taxa_abundance_bars(filtered_ms, classification = 'genus', 
+  treatment = c("status","Sample_type")) + 
+  geom_boxplot() + 
+  geom_point()
 
 ```
 
@@ -35,12 +209,13 @@ p2_1 <- plot_richness(ps_dada2_oral, measures=c("Observed", "Chao1", "ACE", "Sha
   stat_compare_means(label = "p.signif", label.x = 1.5, comparisons = list(c("Control", "TB"))) + 
   geom_boxplot()
 
-ps_ms_oral <- subset_samples(ps_ms_oral, Sample_type == "Oropharynx")
-p2_2 <- plot_richness(ps_ms, measures=c("Observed", "Chao1", "ACE", "Shannon", "Simpson", "InvSimpson", "Fisher"), x = "status") + 
+p2_2 <- plot_richness(ps_ms_oral, measures=c("Observed", "Chao1", "ACE", "Shannon", "Simpson", "InvSimpson", "Fisher"), x = "status") + 
   stat_compare_means(label = "p.signif", label.x = 1.5, comparisons = list(c("Control", "TB"))) + 
   geom_boxplot()
 
-p2_1 + p2_2
+p2_1
+
+dendrogram_phyloseq(ps_ms, c("status","Sample_type"), method = 'bray')
 ```
 
 ```{r}
