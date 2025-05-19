@@ -7,7 +7,7 @@ editor_options:
   chunk_output_type: console
 ---
 ```{r knitr options, include = FALSE}
-knitr::opts_chunk$set(cache=TRUE, cache.path=".cache/")
+knitr::opts_chunk$set(cache=FALSE, cache.path=".cache/")
 ```
 
 ## Setup
@@ -18,6 +18,9 @@ library("dplyr")
 library("tibble")
 library("ggpubr")
 library("phylosmith")
+library("DESeq2")
+library("EnhancedVolcano")
+library("SpiecEasi")
 ```
 
 
@@ -31,14 +34,15 @@ ps_ms_oral <- subset_samples(ps_ms, Sample_type == "Oropharynx")
 ps_dada2_nasal <- subset_samples(ps_dada2, Sample_type == "Nasal")
 ps_ms_nasal <- subset_samples(ps_ms, Sample_type == "Nasal")
 ```
+The DADA2 data is generated from the `dada2_botero.Rmd` file. The MetaScope data 
+was generated from the `process_metascope_id.R` functions. 
 
 ## Plotting relative abundances of MetaScope and DADA2
 ### Species Level Abundances
-```{r}
+```{r Species Level Abundances}
 dada2_df <- psmelt(ps_dada2) |> 
   dplyr::mutate(Species = ifelse(is.na(Species), NA, paste0(Genus, " ", Species)))
 dada2_df$pipeline = "DADA2"
-colnames(dada2_df)
 
 ms_df <- psmelt(ps_ms)
 ms_df$pipeline = "MetaScope"
@@ -76,7 +80,6 @@ ggsave(file="figures/p1_legend.svg", plot=as_ggplot(relab_species_legend),
        dpi = 300)
 ```
 
-<<<<<<< HEAD
 ### Genus Level Abundances
 ```{r, Genus level Abundances}
 relab_genus <- ggplot(merged_df, aes(x = Sample, y = Abundance, fill = Genus)) + 
@@ -127,14 +130,8 @@ ggsave(file="figures/p3_legend.svg", plot=as_ggplot(relab_phylum_legend),
        dpi = 300)
 ```
 
-## Heatmaps
-```{r}
-plot_heatmap(ps_ms, sample.label="Sample_type")
-plot_heatmap(ps_dada2, sample.label="Sample_type")
-```
-
 ## Filtered abundance barplots
-```{r}
+```{r Filtered abundance plots}
 high_abund_dada2 <- merged_df |> 
   dplyr::filter(Abundance > 1000) |>
   dplyr::filter(pipeline == "DADA2")
@@ -186,28 +183,22 @@ ggsave(file="figures/p6_high_abund_species", plot=high_abund_species,
        dpi = 300)
 ```
 
-```{r}
+## Heatmaps
+```{r Filtered heatmaps}
+ps_ms_filt <- taxa_filter(ps_ms, frequency = 0.05)
+  
+abundance_heatmap(ps_ms_filt, classification = 'genus',
+  treatment = "Sample_type", transformation = 'log10') + 
+  facet_wrap(vars(status,Sample_type), nrow = 1, scales = "free_x")
 
-abundance_heatmap(ps_ms, classification = 'species',
-                   treatment = c("status","Sample_type"), transformation = 'relative_abundance')
-abundance_heatmap(ps_dada2, classification = 'Species',
-                   treatment = c("status","Sample_type"), transformation = 'relative_abundance')
-
-
-phylogeny_profile(ps_ms, classification = 'family', 
-  treatment = c("status","Sample_type"), merge = TRUE, 
-  relative_abundance = TRUE)
-
-filtered_ms <- taxa_filter(ps_ms, frequency = 0.8)
-taxa_abundance_bars(filtered_ms, classification = 'genus', 
-  treatment = c("status","Sample_type")) + 
-  geom_boxplot() + 
-  geom_point()
-
+ps_dada2_filt <- taxa_filter(ps_dada2, frequency = 0.01)
+abundance_heatmap(ps_dada2_filt, classification = 'Genus',
+  treatment = "Sample_type", transformation = 'log2') + 
+  facet_wrap(vars(status,Sample_type), nrow = 1, scales = "free_x")
 ```
 
 ## Plotting Alpha Diversity
-```{r}
+```{r Alpha Diversity}
 p2_1 <- plot_richness(ps_dada2_oral, measures=c("Observed", "Chao1", "ACE", "Shannon", "Simpson", "InvSimpson", "Fisher"), x = "status") + 
   stat_compare_means(label = "p.signif", label.x = 1.5, comparisons = list(c("Control", "TB"))) + 
   geom_boxplot()
@@ -216,12 +207,19 @@ p2_2 <- plot_richness(ps_ms_oral, measures=c("Observed", "Chao1", "ACE", "Shanno
   stat_compare_means(label = "p.signif", label.x = 1.5, comparisons = list(c("Control", "TB"))) + 
   geom_boxplot()
 
-p2_1
+p2_3 <- plot_richness(ps_dada2_nasal, measures=c("Observed", "Chao1", "ACE", "Shannon", "Simpson", "InvSimpson", "Fisher"), x = "status") + 
+  stat_compare_means(label = "p.signif", label.x = 1.5, comparisons = list(c("Control", "TB"))) + 
+  geom_boxplot()
 
-dendrogram_phyloseq(ps_ms, c("status","Sample_type"), method = 'bray')
+p2_4 <- plot_richness(ps_ms_nasal, measures=c("Observed", "Chao1", "ACE", "Shannon", "Simpson", "InvSimpson", "Fisher"), x = "status") + 
+  stat_compare_means(label = "p.signif", label.x = 1.5, comparisons = list(c("Control", "TB"))) + 
+  geom_boxplot()
+
+
 ```
 
-```{r}
+## PCOA Plots
+```{r PCoA plots}
 ps_ms.ord <- ordinate(ps_ms, "PCoA", "bray")
 plot_ordination(ps_ms, ps_ms.ord, type="samples", color="status", shape="Sample_type", title="Samples") + 
   geom_point(size=3) + 
@@ -234,4 +232,76 @@ plot_ordination(ps_dada2, ps_dada2.ord, type="samples", color="status", shape="S
   stat_ellipse(
     aes(linetype=Sample_type))
 
+```
+
+```{r}
+taxa_core_graph(ps_ms, treatment = NULL, subset = NULL, 
+  frequencies = seq(0.1, 1, 0.1), abundance_thresholds = seq(0.01, 1, 0.01), 
+  colors = 'default')
+
+taxa_core_graph(ps_dada2, treatment = NULL, subset = NULL, 
+  frequencies = seq(0.1, 1, 0.1), abundance_thresholds = seq(0.01, 1, 0.01), 
+  colors = 'default')
+```
+
+```{r}
+deseq_ms_oral = phyloseq_to_deseq2(ps_ms_oral, ~ status)
+deseq_ms_oral = estimateSizeFactors(deseq_ms_oral, type = 'poscounts')
+deseq_ms_oral = DESeq(deseq_ms_oral, test="Wald", fitType="parametric")
+deseq_ms_oral_res = results(deseq_ms_oral, cooksCutoff = FALSE)
+deseq_ms_oral_res <- cbind(deseq_ms_oral_res, 
+                           as(tax_table(ps_ms_oral)[rownames(deseq_ms_oral_res), ], "matrix"))
+
+EnhancedVolcano(deseq_ms_oral_res,
+  lab = deseq_ms_oral_res$species,
+  x = 'log2FoldChange',
+  y = 'pvalue')
+
+deseq_ms_nasal = phyloseq_to_deseq2(ps_ms_nasal, ~ status)
+deseq_ms_nasal = estimateSizeFactors(deseq_ms_nasal, type = 'poscounts')
+deseq_ms_nasal = DESeq(deseq_ms_nasal, test="Wald", fitType="parametric")
+deseq_ms_nasal_res = results(deseq_ms_nasal, cooksCutoff = FALSE)
+deseq_ms_nasal_res <- cbind(deseq_ms_nasal_res, 
+                           as(tax_table(ps_ms_nasal)[rownames(deseq_ms_nasal_res), ], "matrix"))
+
+EnhancedVolcano(deseq_ms_nasal_res,
+  lab = deseq_ms_nasal_res$species,
+  x = 'log2FoldChange',
+  y = 'pvalue')
+
+
+deseq_dada2_oral = phyloseq_to_deseq2(ps_dada2_oral, ~ status)
+deseq_dada2_oral = estimateSizeFactors(deseq_dada2_oral, type = 'poscounts')
+deseq_dada2_oral = DESeq(deseq_dada2_oral, test="Wald", fitType="parametric")
+
+deseq_dada2_oral_res = results(deseq_dada2_oral, cooksCutoff = FALSE)
+deseq_dada2_oral_res <- cbind(deseq_dada2_oral_res, 
+                              as(tax_table(ps_dada2_oral)[rownames(deseq_dada2_oral_res), ], "matrix"))
+EnhancedVolcano(deseq_dada2_oral_res,
+  lab = paste0(deseq_dada2_oral_res$Genus, " ", deseq_dada2_oral_res$Species),
+  x = 'log2FoldChange',
+  y = 'pvalue')
+
+deseq_dada2_nasal = phyloseq_to_deseq2(ps_dada2_nasal, ~ status)
+deseq_dada2_nasal = estimateSizeFactors(deseq_dada2_nasal, type = 'poscounts')
+deseq_dada2_nasal = DESeq(deseq_dada2_nasal, test="Wald", fitType="parametric")
+
+deseq_dada2_nasal_res = results(deseq_dada2_nasal, cooksCutoff = FALSE)
+deseq_dada2_nasal_res <- cbind(deseq_dada2_nasal_res, 
+                              as(tax_table(ps_dada2_nasal)[rownames(deseq_dada2_nasal_res), ], "matrix"))
+EnhancedVolcano(deseq_dada2_nasal_res,
+  lab = paste0(deseq_dada2_nasal_res$Genus, " ", deseq_dada2_nasal_res$Species),
+  x = 'log2FoldChange',
+  y = 'pvalue')
+
+```
+
+## Network Analysis
+```{r}
+pargs <- list(rep.num=50, seed=10010, ncores=4)
+se_ms <- spiec.easi(ps_dada2, method='mb', lambda.min.ratio=1e-2,
+                    sel.criterion='bstars', pulsar.select=TRUE,
+                    nlambda=20, pulsar.params=pargs))
+ig2.mb <- adj2igraph(getRefit(se.mb.amgut2),  vertex.attr=list(name=taxa_names(amgut2.filt.phy)))
+plot_network(ig2.mb, amgut2.filt.phy, type='taxa', color="Rank3")
 ```
