@@ -20,6 +20,7 @@ library("ggpubr")
 library("phylosmith")
 ```
 
+
 ## Load in processed Data
 ```{r, eval=TRUE, include=TRUE}
 ps_dada2 <- readRDS("data_processed/botero_2014/ps_dada2.rds")
@@ -50,7 +51,6 @@ colnames(ms_df) <- c("OTU", "Sample", "Abundance", "Sequencing_Type", "Patient",
 
 merged_df <- rbind(dada2_df, ms_df)
 
-
 relab_species <- ggplot(merged_df, aes(x = Sample, y = Abundance, fill = Species)) + 
   geom_bar(position ="fill",stat = "identity") + 
   facet_grid(cols = c(vars(Sample_type), vars(status), vars(pipeline)), scales = "free_x")
@@ -70,11 +70,13 @@ ggsave(file="figures/p1_stacked_relab.svg",
            axis.ticks.x=element_blank()),
        device = "svg", width=7.5, height=4, units="in",
        dpi = 300)
+
 ggsave(file="figures/p1_legend.svg", plot=as_ggplot(relab_species_legend),
        device = "svg", width=7.5, height=4, units="in",
        dpi = 300)
 ```
 
+<<<<<<< HEAD
 ### Genus Level Abundances
 ```{r, Genus level Abundances}
 relab_genus <- ggplot(merged_df, aes(x = Sample, y = Abundance, fill = Genus)) + 
@@ -185,6 +187,7 @@ ggsave(file="figures/p6_high_abund_species", plot=high_abund_species,
 ```
 
 ```{r}
+
 abundance_heatmap(ps_ms, classification = 'species',
                    treatment = c("status","Sample_type"), transformation = 'relative_abundance')
 abundance_heatmap(ps_dada2, classification = 'Species',
