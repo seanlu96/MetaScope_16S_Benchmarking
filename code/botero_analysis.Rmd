@@ -20,7 +20,6 @@ library("ggpubr")
 library("phylosmith")
 library("DESeq2")
 library("EnhancedVolcano")
-library("SpiecEasi")
 ```
 
 
@@ -33,13 +32,8 @@ ps_dada2_oral <- subset_samples(ps_dada2, Sample_type == "Oropharynx")
 ps_ms_oral <- subset_samples(ps_ms, Sample_type == "Oropharynx")
 ps_dada2_nasal <- subset_samples(ps_dada2, Sample_type == "Nasal")
 ps_ms_nasal <- subset_samples(ps_ms, Sample_type == "Nasal")
-```
-The DADA2 data is generated from the `dada2_botero.Rmd` file. The MetaScope data 
-was generated from the `process_metascope_id.R` functions. 
 
-## Plotting relative abundances of MetaScope and DADA2
-### Species Level Abundances
-```{r Species Level Abundances}
+
 dada2_df <- psmelt(ps_dada2) |> 
   dplyr::mutate(Species = ifelse(is.na(Species), NA, paste0(Genus, " ", Species)))
 dada2_df$pipeline = "DADA2"
@@ -55,67 +49,54 @@ colnames(ms_df) <- c("OTU", "Sample", "Abundance", "Sequencing_Type", "Patient",
 
 merged_df <- rbind(dada2_df, ms_df)
 
-relab_species <- ggplot(merged_df, aes(x = Sample, y = Abundance, fill = Species)) + 
-  geom_bar(position ="fill",stat = "identity") + 
-  facet_grid(cols = c(vars(Sample_type), vars(status), vars(pipeline)), scales = "free_x")
-relab_species + 
-  theme(legend.position = "none",
-        axis.text.x=element_blank(),
-        axis.ticks.x=element_blank())
-relab_species_legend <- get_legend(relab_species)
-as_ggplot(relab_species_legend)
+dada2_relab_df <- phylosmith::relative_abundance(ps_dada2) |>
+  phyloseq::psmelt() |> 
+  dplyr::mutate(Species = ifelse(is.na(Species), NA, paste0(Genus, " ", Species)))
+dada2_relab_df$pipeline = "DADA2"
 
+ms_relab_df <- phylosmith::relative_abundance(ps_ms) |>
+  phyloseq::psmelt()
+ms_relab_df$pipeline = "MetaScope"
+ms_relab_df$kingdom = "Bacteria"
+ms_relab_df <- ms_relab_df |>
+  dplyr::relocate(kingdom, .before = phylum)
+colnames(ms_relab_df) <- c("OTU", "Sample", "Abundance", "Sequencing_Type", "Patient",
+                     "Sample_type", "status", "Kingdom", "Phylum", "Class", 
+                     "Order", "Family", "Genus", "Species", "pipeline")
+
+merged_relab_df <- rbind(dada2_relab_df, ms_relab_df)
 ```
+The DADA2 data is generated from the `dada2_botero.Rmd` file. The MetaScope data 
+was generated from the `process_metascope_id.R` functions. 
 
-```{r Saving stacked species relab figures, eval=FALSE, include=FALSE}
-ggsave(file="figures/p1_stacked_relab.svg", 
-       plot=relab_species + theme(legend.position = "none",
-           axis.text.x=element_blank(),
-           axis.ticks.x=element_blank()),
-       device = "svg", width=7.5, height=4, units="in",
-       dpi = 300)
-
-ggsave(file="figures/p1_legend.svg", plot=as_ggplot(relab_species_legend),
-       device = "svg", width=7.5, height=4, units="in",
-       dpi = 300)
-```
-
-### Genus Level Abundances
-```{r, Genus level Abundances}
-relab_genus <- ggplot(merged_df, aes(x = Sample, y = Abundance, fill = Genus)) + 
-  geom_bar(position ="fill",stat = "identity") + 
-  facet_grid(cols = c(vars(Sample_type), vars(status), vars(pipeline)), scales = "free_x")
-relab_genus + 
-  theme(legend.position = "none",
-        axis.text.x=element_blank(),
-        axis.ticks.x=element_blank())
-relab_genus_legend <- get_legend(relab_genus)
-as_ggplot(relab_genus_legend)
-```
-
-```{r Saving stacked genus relab figures, eval=FALSE, include=FALSE}
-ggsave(file="figures/p2_stacked_relab_genus.svg", 
-       plot=relab_genus + theme(legend.position = "none",
-           axis.text.x=element_blank(),
-           axis.ticks.x=element_blank()),
-       device = "svg", width=7.5, height=4, units="in",
-       dpi = 300)
-ggsave(file="figures/p2_legend.svg", plot=as_ggplot(relab_genus_legend),
-       device = "svg", width=7.5, height=4, units="in",
-       dpi = 300)
-```
-
+## Plotting relative abundances of MetaScope and DADA2
 ### Phylum Level Abundances
 ```{r, Phylum level Abundances}
-relab_phylum <- ggplot(merged_df, aes(x = Sample, y = Abundance, fill = Phylum)) + 
+top_phyla <- merged_relab_df |>
+  dplyr::group_by(Phylum) |>
+  dplyr::summarise(total_abund = sum(Abundance), .groups = "drop") |>
+  dplyr::filter(!is.na(Phylum)) |>
+  slice_max(order_by=total_abund, n = 5) |>
+  pull(Phylum) |>
+  sort()
+
+relab_phylum <- ggplot(merged_df, 
+                        aes(x = Sample, y = Abundance, fill = Phylum)) + 
   geom_bar(position ="fill",stat = "identity") + 
-  facet_grid(cols = c(vars(Sample_type), vars(status), vars(pipeline)), scales = "free_x")
-relab_phylum + 
-  theme(legend.position = "none",
-        axis.text.x=element_blank(),
+  facet_grid(cols = vars(Sample_type, status, pipeline), scales = "free_x") +
+  scale_fill_discrete() + 
+  theme(axis.text.x=element_blank(),
         axis.ticks.x=element_blank())
+relab_phylum
 relab_phylum_legend <- get_legend(relab_phylum)
-as_ggplot(relab_phylum_legend)
+
+merged_relab_df |>
+  dplyr::filter(Phylum %in% top_phyla) |>
+  ggplot(aes(fill=status, y=Abundance, x=Phylum)) + 
+  geom_boxplot() + 
+  facet_grid(vars(Sample_type, pipeline)) + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) + 
+  scale_y_continuous(trans='log2')
 ```
 
 ```{r Saving stacked phylum relab figures, eval=FALSE, include=FALSE}
@@ -129,6 +110,104 @@ ggsave(file="figures/p3_legend.svg", plot=as_ggplot(relab_phylum_legend),
        device = "svg", width=7.5, height=4, units="in",
        dpi = 300)
 ```
+At Phylum level taxonomies, both DADA2 and MetaScope show similar results. Nasal 
+samples in the controls show increased abundance of Acidobacteriota compared to 
+TB sample and a decreased relative abundance in Pseudomonadota in controls 
+relative to TB samples. The oropharynx samples mild decrease in Baciollota phyla
+and increases in Fusobacteriota and Pseudomonadota in the controls compared to 
+TB positive samples. 
+
+### Genus Level Abundances
+```{r, Genus level Abundances}
+top_genera <- merged_relab_df |>
+  dplyr::group_by(Genus) |>
+  dplyr::summarise(total_abund = sum(Abundance), .groups = "drop") |>
+  dplyr::filter(!is.na(Genus)) |>
+  slice_max(order_by=total_abund, n = 25) |>
+  pull(Genus) |>
+  sort()
+
+relab_genus <- ggplot(merged_df, 
+                        aes(x = Sample, y = Abundance, fill = Genus)) + 
+  geom_bar(position ="fill",stat = "identity") + 
+  facet_grid(cols = vars(Sample_type, status, pipeline), scales = "free_x") +
+  scale_fill_discrete(breaks = top_genera) + 
+  theme(axis.text.x=element_blank(),
+        axis.ticks.x=element_blank())
+relab_genus
+relab_genus_legend <- get_legend(relab_genus)
+
+top_genera <- merged_relab_df |>
+  dplyr::group_by(Genus) |>
+  dplyr::summarise(total_abund = sum(Abundance), .groups = "drop") |>
+  dplyr::filter(!is.na(Genus)) |>
+  slice_max(order_by=total_abund, n = 5) |>
+  pull(Genus) |>
+  sort()
+
+merged_relab_df |>
+  dplyr::filter(Genus %in% top_genera) |>
+  ggplot(aes(fill=status, y=Abundance, x=Genus)) + 
+  geom_boxplot() +
+  facet_grid(vars(Sample_type, pipeline)) + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) + 
+  scale_y_continuous(trans='log2')
+```
+
+```{r Saving stacked genus relab figures, eval=FALSE, include=FALSE}
+ggsave(file="figures/p2_stacked_relab_genus.svg", 
+       plot=relab_genus,
+       device = "svg", width=7.5, height=4, units="in",
+       dpi = 300)
+ggsave(file="figures/p2_legend.svg", plot=as_ggplot(relab_genus_legend),
+       device = "svg", width=7.5, height=4, units="in",
+       dpi = 300)
+```
+At the genus level, still DADA2 and MetaScope have similar relative abundances
+and identify the same genera that are differentially expressed. Notably, DADA2 
+identifies more Actinobacillus 
+
+### Species Level Abundances
+```{r Species Level Abundances}
+top_species <- merged_relab_df |>
+  dplyr::group_by(Species, Genus) |>
+  dplyr::summarise(total_abund = sum(Abundance), .groups = "drop") |>
+  dplyr::filter(!is.na(Species)) |>
+  slice_max(order_by=total_abund, n = 25) |>
+  pull(Species) |>
+  sort()
+
+relab_species <- ggplot(merged_df, 
+                        aes(x = Sample, y = Abundance, fill = Species)) + 
+  geom_bar(position ="fill",stat = "identity") + 
+  facet_grid(cols = vars(Sample_type, status, pipeline), scales = "free_x") +
+  scale_fill_discrete(breaks = top_species) + 
+  theme(axis.text.x=element_blank(),
+        axis.ticks.x=element_blank())
+relab_species
+relab_species_legend <- get_legend(relab_species)
+
+merged_relab_df |>
+  dplyr::filter(Species %in% top_species) |>
+  ggplot(aes(fill=status, y=Abundance, x=Species)) + 
+  geom_boxplot() + 
+  facet_grid(vars(Sample_type, pipeline)) + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) + 
+  scale_y_continuous(trans='log2')
+```
+
+```{r Saving stacked species relab figures, eval=FALSE, include=FALSE}
+ggsave(file="figures/p1_stacked_relab.svg", 
+       plot=relab_species,
+       device = "svg", width=7.5, height=4, units="in",
+       dpi = 300)
+
+ggsave(file="figures/p1_legend.svg", plot=as_ggplot(relab_species_legend),
+       device = "svg", width=7.5, height=4, units="in",
+       dpi = 300)
+```
+
+
 
 ## Filtered abundance barplots
 ```{r Filtered abundance plots}
@@ -214,8 +293,6 @@ p2_3 <- plot_richness(ps_dada2_nasal, measures=c("Observed", "Chao1", "ACE", "Sh
 p2_4 <- plot_richness(ps_ms_nasal, measures=c("Observed", "Chao1", "ACE", "Shannon", "Simpson", "InvSimpson", "Fisher"), x = "status") + 
   stat_compare_means(label = "p.signif", label.x = 1.5, comparisons = list(c("Control", "TB"))) + 
   geom_boxplot()
-
-
 ```
 
 ## PCOA Plots
@@ -294,14 +371,4 @@ EnhancedVolcano(deseq_dada2_nasal_res,
   x = 'log2FoldChange',
   y = 'pvalue')
 
-```
-
-## Network Analysis
-```{r}
-pargs <- list(rep.num=50, seed=10010, ncores=4)
-se_ms <- spiec.easi(ps_dada2, method='mb', lambda.min.ratio=1e-2,
-                    sel.criterion='bstars', pulsar.select=TRUE,
-                    nlambda=20, pulsar.params=pargs))
-ig2.mb <- adj2igraph(getRefit(se.mb.amgut2),  vertex.attr=list(name=taxa_names(amgut2.filt.phy)))
-plot_network(ig2.mb, amgut2.filt.phy, type='taxa', color="Rank3")
 ```
