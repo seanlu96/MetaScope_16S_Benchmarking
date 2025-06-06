@@ -1,5 +1,1026 @@
 ---
 title: "mock_microbiome_analysis"
-output: html_document
+author: "Sean Lu"
+date: "`r Sys.Date()`"
+output: pdf_document
+editor_options:
+  chunk_output_type: console
 ---
+```{r knitr options, include = FALSE}
+knitr::opts_chunk$set(cache=FALSE, cache.path=".cache/")
+```
+
+## Setup
+```{r Loading in Libraries}
+library("phyloseq")
+library("ggplot2")     
+library("dplyr")        
+library("tibble")
+library("ggpubr")
+library("phylosmith")
+library("DESeq2")
+library("EnhancedVolcano")
+library("SpiecEasi")
+```
+
+```{r}
+priors_df <- read.csv("data_processed/kozich_2013/prior_weights/kozich_prior_weights_1.0.csv", 
+                      head = TRUE)
+species_ground_truth <- priors_df$species
+
+create_summary_df <- function(csv_paths, pipeline_name) {
+  summary_df <- data.frame(
+    Species = c("No Call", "Incorrect Call",priors_df$species))
+  n = 1
+  for (i in csv_paths) {
+    # Get Sample Names
+    sample_name <- sub("\\..*$", "", basename(i))
+    # Clean MetaBlast Table
+    metascope_df <- read.csv(i, head = TRUE)
+    head(metascope_df)
+    metascope_df <- metascope_df |>
+      dplyr::select(Genome, read_count) |>
+      dplyr::mutate_if(is.numeric, ~ . / sum(.))
+    colnames(metascope_df) <- c("Species", sample_name)
+    #metascope_df[metascope_df == "Phocaeicola vulgatus"] <- 'Bacteroides vulgatus'
+    #metascope_df[metascope_df == "Schaalia odontolytica"] <- 'Actinomyces odontolyticus'
+    #metascope_df[metascope_df == "Cutibacterium acnes"] <- 'Propionibacterium acnes'
+    #metascope_df[metascope_df == "Cereibacter sphaeroides"] <- 'Rhodobacter sphaeroides'
+    
+    
+    
+    summary_df <- dplyr::left_join(summary_df, metascope_df, by = "Species")
+    summary_df[is.na(summary_df)] <- 0
+    
+    no_call.metascope <- metascope_df |>
+      dplyr::filter(is.na(Species)) |>
+      dplyr::select(sample_name) |>
+      sum()
+    correct_call.metascope <- metascope_df |>
+      dplyr::filter(Species %in% priors_df$species) |>
+      dplyr::select(sample_name) |>
+      sum()
+    incorrect_call.metascope <- 1 - correct_call.metascope - no_call.metascope
+    
+    summary_df[1,n+1] <- no_call.metascope
+    summary_df[2,n+1] <- incorrect_call.metascope
+    n = n + 1
+  } 
+  
+  
+  summary_df_long <- tidyr::pivot_longer(
+    summary_df, 
+    cols = c(2:ncol(summary_df)), 
+    values_to = "prop"
+  )
+  summary_df_long$Species <- factor(summary_df_long$Species, 
+                                    levels = c("No Call", "Incorrect Call", priors_df$species))
+  summary_df_long$name <- factor(summary_df_long$name)
+  summary_df_long$pipeline <- factor(rep(pipeline_name, nrow(summary_df_long)))
+  return(summary_df_long)
+}
+```
+
+
+```{r Loading In Data, eval=FALSE, echo=FALSE}
+metascope_list <- list.files(
+  path = "/projects/f_wj183_1/work/Sean/Kozich/priors_metaid/results", 
+  pattern = ".metascope_id.csv", 
+  full.names = TRUE, 
+  recursive = TRUE
+)
+metascope_priors_list <- list.files(
+  path = "/projects/f_wj183_1/work/Sean/Kozich/priors_metaid/results_priors", 
+  pattern = ".metascope_id.csv", 
+  full.names = TRUE, 
+  recursive = TRUE)
+# Init
+species_ground_truth <- c("Acinetobacter_baumannii", 
+                          "Bacillus_cereus",
+                          "Bacteroides_vulgatus",
+                          "Cutibacterium_acnes",
+                          "Clostridium_beijerinckii", "Deinococcus_radiodurans", 
+                          "Enterococcus_faecium", "Escherichia_coli",
+                          "Helicobacter_pylori", "Lactobacillus_gasseri", 
+                          "Listeria_monocytogenes", "Neisseria_meningitidis", 
+                          "Porphyromonas_gingivalis", 
+                          "Pseudomonas_aeruginosa", "Rhodobacter_sphaeroides", 
+                          "Schaalia_odontolyticus", 
+                          "Staphylococcus_aureus", "Staphylococcus_epidermidis", 
+                          "Streptococcus_agalactiae", "Streptococcus_mutans", 
+                          "Streptococcus_pneumoniae")
+priors_df <- read.csv("/projectsp/f_wj183_1/work/Sean/Kozich/priors_metaid/priors_weights/kozich_prior_weights_1.0.csv", 
+                      head = TRUE)
+species_ground_truth <- priors_df$species
+copy_number_16S <- c(6, 14, 7, 3, 15, 3, 6, 7, 2, 5, 6, 4, 4, 4, 3, 3, 6, 6, 7, 5, 4)
+ground_truth_prop <- copy_number_16S / sum(copy_number_16S)
+################################################################################
+# MetaScope Results
+################################################################################
+summary_df_metascope_id <- data.frame(
+  Species = c("No Call", "Incorrect Call",priors_df$species))
+n = 1
+for (i in metascope_list) {
+  # Get Sample Names
+  sample_name <- sub("\\..*$", "", basename(i))
+  print(sample_name)
+  # Clean MetaBlast Table
+  metascope_df <- read.csv(i, head = TRUE)
+  head(metascope_df)
+  metascope_df <- metascope_df |>
+    dplyr::select(Genome, read_count) |>
+    dplyr::mutate_if(is.numeric, ~ . / sum(.))
+  colnames(metascope_df) <- c("Species", sample_name)
+  metascope_df[metascope_df == "Phocaeicola vulgatus"] <- 'Bacteroides vulgatus'
+  metascope_df[metascope_df == "Schaalia odontolytica"] <- 'Actinomyces odontolyticus'
+  metascope_df[metascope_df == "Cutibacterium acnes"] <- 'Propionibacterium acnes'
+  metascope_df[metascope_df == "Cereibacter sphaeroides"] <- 'Rhodobacter sphaeroides'
+  
+  
+  
+  summary_df_metascope_id <- dplyr::left_join(summary_df_metascope_id, metascope_df, by = "Species")
+  summary_df_metascope_id[is.na(summary_df_metascope_id)] <- 0
+  
+  no_call.metascope <- metascope_df |>
+    dplyr::filter(is.na(Species)) |>
+    dplyr::select(sample_name) |>
+    sum()
+  correct_call.metascope <- metascope_df |>
+    dplyr::filter(Species %in% priors_df$species) |>
+    dplyr::select(sample_name) |>
+    sum()
+  incorrect_call.metascope <- 1 - correct_call.metascope - no_call.metascope
+  
+  summary_df_metascope_id[1,n+1] <- no_call.metascope
+  summary_df_metascope_id[2,n+1] <- incorrect_call.metascope
+  n = n + 1
+} 
+
+
+summary_df_long_metascope_id <- tidyr::pivot_longer(
+  summary_df_metascope_id, 
+  cols = c(2:ncol(summary_df_metascope_id)), 
+  values_to = "prop"
+)
+summary_df_long_metascope_id$Species <- factor(summary_df_long_metascope_id$Species, 
+                                  levels = c("No Call", "Incorrect Call", priors_df$species))
+summary_df_long_metascope_id$name <- factor(summary_df_long_metascope_id$name)
+summary_df_long_metascope_id$pipeline <- factor(rep("MetaScope", nrow(summary_df_long_metascope_id)))
+
+# Binding Summary Df Longs Together
+summary_df_final <- summary_df_long_metascope_id
+#summary_df_final <- rbind(summary_df_long, summary_df_long_metascope_id)
+summary_df_final$pipeline <- factor(summary_df_final$pipeline,
+                                    levels = c("MetaScope"))
+
+```
+
+```{r}
+# Adding Ground Truth
+ground_truth_df <- data.frame(
+  Species = c("No Call", "Incorrect Call",priors_df$species))
+
+ground_truth_df <- cbind(ground_truth_df, 
+                         as.data.frame(do.call(cbind, replicate(33, c(0,0,rep(1/21, 21)), simplify = FALSE))))
+# ground_truth_df <- as.data.frame(do.call(cbind, replicate(18, c(0,0,ground_truth_prop), simplify = FALSE)))
+colnames(ground_truth_df) <- colnames(summary_df_metascope_id)
+
+summary_df_long_ground_truth <- tidyr::pivot_longer(
+  ground_truth_df, 
+  cols = c(2:34), 
+  values_to = "prop"
+)
+summary_df_long_ground_truth$pipeline <- factor(rep("Ground Truth", nrow(summary_df_long_ground_truth)))
+
+summary_df_final <- rbind(summary_df_final, summary_df_long_ground_truth)
+summary_df_final$pipeline <- factor(summary_df_final$pipeline,
+                                    levels = c("Ground Truth", "MetaScope"))
+summary_df_final$Species <- factor(summary_df_final$Species, 
+                                  levels = c("No Call", "Incorrect Call", priors_df$species))
+
+
+
+species_ground_truth <- priors_df$species
+################################################################################
+#DADA2 RESULTS
+################################################################################
+summary_df_dada2 <- data.frame(
+  Species = c("No Call", "Incorrect Call",priors_df$species))
+# Left joining with aggregate because duplicate species names
+for (i in c(1:length(metascope_list))) {
+  # Get Sample Names
+  sample_name <- sub("\\..*$", "", basename(metascope_list[i]))
+  print(sample_name)
+  # Clean MetaBlast Table
+  dada2_df <- read.csv(paste0("~/MetaBlast_Tables/dada2_", sample_name, ".csv"))
+  dada2_df <- dplyr::mutate(dada2_df, Species = ifelse(is.na(Species), NA, paste0(Genus, " ", Species))) |>
+    dplyr::select(Species, reads_count) |> 
+    dplyr::mutate_if(is.numeric, ~ . / sum(.))
+  colnames(dada2_df) <- c("Species", sample_name)
+  dada2_df[dada2_df == "Phocaeicola vulgatus"] <- 'Bacteroides vulgatus'
+  dada2_df[dada2_df == "Schaalia odontolytica"] <- 'Actinomyces odontolyticus'
+  dada2_df[dada2_df == "Cutibacterium acnes"] <- 'Propionibacterium acnes'
+  dada2_df[dada2_df == "Cereibacter sphaeroides"] <- 'Rhodobacter sphaeroides'
+  dada2_df[dada2_df == "Clostridium sensu stricto 1 beijerinckii"] <- 'Clostridium beijerinckii'
+  
+  
+  summary_df_dada2 <- dplyr::left_join(summary_df_dada2, dada2_df, by = "Species")
+  summary_df_dada2[is.na(summary_df_dada2)] <- 0
+  
+  no_call.metascope <- dada2_df |>
+    dplyr::filter(is.na(Species)) |>
+    dplyr::select(sample_name) |>
+    sum()
+  correct_call.metascope <- dada2_df |>
+    dplyr::filter(Species %in% species_ground_truth) |>
+    dplyr::select(sample_name) |>
+    sum()
+  incorrect_call.metascope <- 1 - correct_call.metascope - no_call.metascope
+  
+  summary_df_dada2[1,i+1] <- no_call.metascope
+  summary_df_dada2[2,i+1] <- incorrect_call.metascope
+} 
+
+summary_df_dada2_longer <- tidyr::pivot_longer(
+  summary_df_dada2, 
+  cols = c(2:34), 
+  values_to = "prop"
+)
+summary_df_dada2_longer$Species <- factor(summary_df_long_metascope_id$Species, 
+                                               levels = c("No Call", "Incorrect Call", species_ground_truth))
+summary_df_dada2_longer$name <- factor(summary_df_dada2_longer$name)
+summary_df_dada2_longer$pipeline <- factor(rep("DADA2-NB", nrow(summary_df_dada2_longer)))
+
+summary_df_final <- rbind(summary_df_final, summary_df_dada2_longer)
+summary_df_final$pipeline <- factor(summary_df_final$pipeline,
+                                    levels = c("Ground Truth", "DADA2-NB", "MetaScope"))
+summary_df_final$Species <- factor(summary_df_final$Species, 
+                                   levels = c("No Call", "Incorrect Call", species_ground_truth))
+
+#write.csv(summary_df_final,"/home/sl1729/R_Scripts/koz_summary_df.csv", row.names = FALSE)
+
+```
+
+
+```{r}
+################################################################################
+# MetaScope Priors Results
+################################################################################
+summary_df_metascope_priors<- data.frame(
+  Species = c("No Call", "Incorrect Call",priors_df$species))
+n = 1
+for (i in metascope_priors_list) {
+  # Get Sample Names
+  sample_name <- sub("\\..*$", "", basename(i))
+  print(sample_name)
+  # Clean MetaBlast Table
+  metascope_df <- read.csv(i, head = TRUE)
+  head(metascope_df)
+  metascope_df <- metascope_df |>
+    dplyr::select(Genome, read_count) |>
+    dplyr::mutate_if(is.numeric, ~ . / sum(.))
+  colnames(metascope_df) <- c("Species", sample_name)
+  #metascope_df[metascope_df == "Phocaeicola vulgatus"] <- 'Bacteroides vulgatus'
+  #metascope_df[metascope_df == "Schaalia odontolytica"] <- 'Actinomyces odontolyticus'
+  #metascope_df[metascope_df == "Cutibacterium acnes"] <- 'Propionibacterium acnes'
+  #metascope_df[metascope_df == "Cereibacter sphaeroides"] <- 'Rhodobacter sphaeroides'
+  
+  
+  
+  summary_df_metascope_priors <- dplyr::left_join(summary_df_metascope_priors, metascope_df, by = "Species")
+  summary_df_metascope_priors[is.na(summary_df_metascope_priors)] <- 0
+  
+  no_call.metascope <- metascope_df |>
+    dplyr::filter(is.na(Species)) |>
+    dplyr::select(sample_name) |>
+    sum()
+  correct_call.metascope <- metascope_df |>
+    dplyr::filter(Species %in% priors_df$species) |>
+    dplyr::select(sample_name) |>
+    sum()
+  incorrect_call.metascope <- 1 - correct_call.metascope - no_call.metascope
+  
+  summary_df_metascope_priors[1,n+1] <- no_call.metascope
+  summary_df_metascope_priors[2,n+1] <- incorrect_call.metascope
+  n = n + 1
+} 
+
+
+summary_df_long_metascope_priors <- tidyr::pivot_longer(
+  summary_df_metascope_priors, 
+  cols = c(2:ncol(summary_df_metascope_priors)), 
+  values_to = "prop"
+)
+summary_df_long_metascope_priors$Species <- factor(summary_df_long_metascope_priors$Species, 
+                                  levels = c("No Call", "Incorrect Call", priors_df$species))
+summary_df_long_metascope_priors$name <- factor(summary_df_long_metascope_priors$name)
+summary_df_long_metascope_priors$pipeline <- factor(rep("MetaScope Priors", nrow(summary_df_long_metascope_priors)))
+
+# Binding Summary Df Longs Together
+summary_df_final <- rbind(summary_df_final, summary_df_long_metascope_priors)
+summary_df_final$pipeline <- factor(summary_df_final$pipeline,
+                                    levels = c("Ground Truth", "DADA2-NB", "MetaScope", "MetaScope Priors"))
+summary_df_final$Species <- factor(summary_df_final$Species, 
+                                   levels = c("No Call", "Incorrect Call", species_ground_truth))
+
+```
+
+# Plotting Relative Abundance of Mock Microbiome             
+
+```{r relab plot, echo=FALSE, fig.align = 'center'}
+library("ggsci")
+library("ggplot2")
+library("colorspace")
+
+#summary_df_final <- read.csv("/home/sl1729/R_Scripts/koz_summary_df.csv")
+summary_df_final$Species <- factor(summary_df_final$Species, 
+                                   levels = c("No Call", 
+                                              "Incorrect Call", 
+                                              species_ground_truth))
+summary_df_final$pipeline <- factor(summary_df_final$pipeline,
+                                    levels = c("Ground Truth", 
+                                               "DADA2-NB", 
+                                               "MetaScope", 
+                                               "MetaScope Priors"))
+
+num_colors <- 21
+wheel_colors <- colorspace::qualitative_hcl(num_colors, palette = "Dark3")
+wheel_colors <- append(wheel_colors, c("grey85", "grey75"), after = 0)
+
+p1 <- ggplot(data = summary_df_final  , aes(fill = Species, y = prop, x = name)) +
+  geom_bar(position ="stack", stat = "identity")+
+  scale_fill_manual(values = wheel_colors, name = "Species") + 
+  ylab("Relative Abundance") + 
+  xlab("") +
+  scale_y_continuous(breaks = seq(0,1, by = 0.1)) +
+  facet_grid(~pipeline) + 
+  theme(axis.text.x=element_blank(),
+        axis.ticks.x = element_blank(),
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        panel.background = element_blank())
+plot(p1)                
+
+```
+
+```{Accuracy Table}
+################################################################################
+# Accuracy Table
+################################################################################
+#                DADA2   MetaScope MetaBlast
+#Correct_Call
+#Incorrect_Call
+#No_Call
+
+dada2_correct_call <- summary_df_final |> 
+  dplyr::filter(!(Species %in% c("Incorrect Call", "No Call"))) |>
+  dplyr::filter(pipeline == "DADA2-NB") |>
+  dplyr::group_by(name) |>
+  dplyr::summarise(total_prop = sum(prop)) |>
+  dplyr::pull(total_prop) |>
+  mean() |>
+  round(digits =3)
+dada2_correct_call_sd <- summary_df_final |> 
+  dplyr::filter(!(Species %in% c("Incorrect Call", "No Call"))) |>
+  dplyr::filter(pipeline == "DADA2-NB") |>
+  dplyr::group_by(name) |>
+  dplyr::summarise(total_prop = sum(prop)) |>
+  dplyr::pull(total_prop) |>
+  sd(na.rm = TRUE)|>
+  round(digits = 3)
+dada2_no_call <- summary_df_final |>
+  dplyr::filter(Species == "No Call") |>
+  dplyr::filter(pipeline == "DADA2-NB") |>
+  dplyr::pull(prop) |>
+  mean()|>
+  round(digits = 3)
+dada2_no_call_sd <- summary_df_final |>
+  dplyr::filter(Species == "No Call") |>
+  dplyr::filter(pipeline == "DADA2-NB") |>
+  dplyr::pull(prop) |>
+  sd(na.rm = TRUE)|>
+  round(digits = 3)
+dada2_incorrect_call <- summary_df_final |>
+  dplyr::filter(Species == "Incorrect Call") |>
+  dplyr::filter(pipeline == "DADA2-NB") |>
+  dplyr::pull(prop) |>
+  mean()|>
+  round(digits = 3)
+dada2_incorrect_call_sd <- summary_df_final |>
+  dplyr::filter(Species == "Incorrect Call") |>
+  dplyr::filter(pipeline == "DADA2-NB") |>
+  dplyr::pull(prop) |>
+  sd(na.rm = TRUE)|>
+  round(digits = 3)
+
+metascope_correct_call <- summary_df_final |> 
+  dplyr::filter(!(Species %in% c("Incorrect Call", "No Call"))) |>
+  dplyr::filter(pipeline == "MetaScope") |>
+  dplyr::group_by(name) |>
+  dplyr::summarise(total_prop = sum(prop)) |>
+  dplyr::pull(total_prop) |>
+  mean()|>
+  round(digits = 3)
+metascope_correct_call_sd <- summary_df_final |> 
+  dplyr::filter(!(Species %in% c("Incorrect Call", "No Call"))) |>
+  dplyr::filter(pipeline == "MetaScope") |>
+  dplyr::group_by(name) |>
+  dplyr::summarise(total_prop = sum(prop)) |>
+  dplyr::pull(total_prop) |>
+  sd(na.rm = TRUE)|>
+  round(digits = 3)
+metascope_no_call <- summary_df_final |>
+  dplyr::filter(Species == "No Call") |>
+  dplyr::filter(pipeline == "MetaScope") |>
+  dplyr::pull(prop) |>
+  mean()|>
+  round(digits = 3)
+metascope_no_call_sd <- summary_df_final |>
+  dplyr::filter(Species == "No Call") |>
+  dplyr::filter(pipeline == "MetaScope") |>
+  dplyr::pull(prop) |>
+  sd(na.rm = TRUE)|>
+  round(digits = 3)
+metascope_incorrect_call <- summary_df_final |>
+  dplyr::filter(Species == "Incorrect Call") |>
+  dplyr::filter(pipeline == "MetaScope") |>
+  dplyr::pull(prop) |>
+  mean()|>
+  round(digits = 3)
+metascope_incorrect_call_sd <- summary_df_final |>
+  dplyr::filter(Species == "Incorrect Call") |>
+  dplyr::filter(pipeline == "MetaScope") |>
+  dplyr::pull(prop) |>
+  sd(na.rm = TRUE)|>
+  round(digits = 3)
+
+
+metablast_correct_call <- summary_df_final |> 
+  dplyr::filter(!(Species %in% c("Incorrect Call", "No Call"))) |>
+  dplyr::filter(pipeline == "MetaBlast") |>
+  dplyr::group_by(name) |>
+  dplyr::summarise(total_prop = sum(prop)) |>
+  dplyr::pull(total_prop) |>
+  mean()|>
+  round(digits = 3)
+metablast_correct_call_sd <- summary_df_final |> 
+  dplyr::filter(!(Species %in% c("Incorrect Call", "No Call"))) |>
+  dplyr::filter(pipeline == "MetaBlast") |>
+  dplyr::group_by(name) |>
+  dplyr::summarise(total_prop = sum(prop)) |>
+  dplyr::pull(total_prop) |>
+  sd(na.rm = TRUE)|>
+  round(digits = 3)
+metablast_no_call <- summary_df_final |>
+  dplyr::filter(Species == "No Call") |>
+  dplyr::filter(pipeline == "MetaBlast") |>
+  dplyr::pull(prop) |>
+  mean()|>
+  round(digits = 3)
+metablast_no_call_sd <- summary_df_final |>
+  dplyr::filter(Species == "No Call") |>
+  dplyr::filter(pipeline == "MetaBlast") |>
+  dplyr::pull(prop) |>
+  sd(na.rm = TRUE)|>
+  round(digits = 3)
+metablast_incorrect_call <- summary_df_final |>
+  dplyr::filter(Species == "Incorrect Call") |>
+  dplyr::filter(pipeline == "MetaBlast") |>
+  dplyr::pull(prop) |>
+  mean()|>
+  round(digits = 3)
+metablast_incorrect_call_sd <- summary_df_final |>
+  dplyr::filter(Species == "Incorrect Call") |>
+  dplyr::filter(pipeline == "MetaBlast") |>
+  dplyr::pull(prop) |>
+  sd(na.rm = TRUE)|>
+  round(digits = 3)
+
+df <- tidyr::tibble(
+  "Correct Call" = c("0.301 ± 0.017", "0.688 ± 0.021", "0.841 ± 0.030"),
+  "No Call" = c("0.646 ± 0.018", "0.212 ± 0.017", "0.0876 ± 0.013"),
+  "Incorrect Call" = c("0.0510 ± 0.0038",       "0.0984 ± 0.010",       "0.0703 ± 0.024")
+)
+
+df <- tidyr::tibble(
+  "Correct Call" = c(paste0(dada2_correct_call, " ± ", dada2_correct_call_sd),
+                     paste0(metascope_correct_call, " ± ", metascope_correct_call),
+                     paste0(metablast_correct_call, " ± ", metablast_correct_call_sd)),
+  "No Call" = c(paste0(dada2_no_call, " ± ", dada2_no_call_sd),
+                     paste0(metascope_no_call, " ± ", metascope_no_call),
+                     paste0(metablast_no_call, " ± ", metablast_no_call_sd)),
+  "Incorrect Call" = c(paste0(dada2_incorrect_call, " ± ", dada2_incorrect_call_sd),
+                     paste0(metascope_incorrect_call, " ± ", metascope_incorrect_call),
+                     paste0(metablast_incorrect_call, " ± ", metablast_incorrect_call_sd))
+)
+
+row.names(df) <- c("DADA2", "MetaScope", "MetaBlast")
+df <- df |> tibble::rownames_to_column("Profiler")
+
+library("flextable")
+table <- flextable(data = df) |>
+  width(width = 1.25) |>
+  bold(bold = TRUE, part = "header")
+  
+table
+
+
+
+
+###############################################################################
+# looking at species missed by dada2, metascope, metablast
+
+metablast_missed <- summary_df_final |>
+  dplyr::group_by(pipeline, Species) |>
+  dplyr::summarise(avg_prop = mean(prop))
+
+
+metablast_missed <- summary_df_final |>
+  dplyr::filter(prop == 0) |>
+  dplyr::group_by(name, pipeline) |>
+  dplyr::summarise(number_missed = dplyr::n()) |>
+  dplyr::group_by(pipeline)|>
+  dplyr::summarise(avg_number_missed = mean(number_missed))
+
+
+```
+
+#
+```{r Accuracy Calculations}
+# This metascope is k - 25
+p_bar_with_stats<- summary_df_final |> dplyr::filter(Species %in% c("No Call", "Incorrect Call")) |>
+  tidyr::pivot_wider(names_from = Species, values_from = prop, names_repair = "universal") |>
+  dplyr::mutate(Correct.Call = 1 - (No.Call + Incorrect.Call)) |>
+  dplyr::filter(pipeline != "Ground Truth") |>
+  dplyr::group_by(pipeline) |>
+  dplyr::group_by(name) |> 
+  ggplot(aes(x = pipeline, y = Correct.Call)) +
+  geom_boxplot() + 
+  geom_jitter() + 
+  ylim(0,1.25) + 
+  stat_compare_means(label.y = 1.25, method = "anova", paired = TRUE) +
+  stat_compare_means(comparisons = list(c("DADA2-NB", "MetaScope"), 
+                                        c("DADA2-NB", "MetaScope Priors"), c("MetaScope", "MetaScope Priors")), 
+                     method = "wilcox.test", 
+                     paired = FALSE)
+  
+
+
+```
+# Including other priors 
+
+```{r}
+
+
+priors_0.005 <- create_summary_df(
+  list.files(
+    path = "/projects/f_wj183_1/work/Sean/Kozich/priors_metaid/results_priors_0.005", 
+    pattern = ".metascope_id.csv", 
+    full.names = TRUE, 
+    recursive = TRUE), 
+  pipeline_name = "0.005"
+)
+
+priors_0.01 <- create_summary_df(
+  list.files(
+    path = "/projects/f_wj183_1/work/Sean/Kozich/priors_metaid/results_priors_0.01", 
+    pattern = ".metascope_id.csv", 
+    full.names = TRUE, 
+    recursive = TRUE), 
+  pipeline_name = "0.01"
+)
+
+priors_0.005 <- create_summary_df(
+  list.files(
+    path = "/projects/f_wj183_1/work/Sean/Kozich/priors_metaid/results_priors_0.005", 
+    pattern = ".metascope_id.csv", 
+    full.names = TRUE, 
+    recursive = TRUE), 
+  pipeline_name = "0.01"
+)
+
+priors_0.05 <- create_summary_df(
+  list.files(
+    path = "/projects/f_wj183_1/work/Sean/Kozich/priors_metaid/results_priors_0.05", 
+    pattern = ".metascope_id.csv", 
+    full.names = TRUE, 
+    recursive = TRUE), 
+  pipeline_name = "0.05"
+)
+
+priors_0.1 <- create_summary_df(
+  list.files(
+    path = "/projects/f_wj183_1/work/Sean/Kozich/priors_metaid/results_priors_0.1", 
+    pattern = ".metascope_id.csv", 
+    full.names = TRUE, 
+    recursive = TRUE), 
+  pipeline_name = "0.1"
+)
+
+priors_0.5 <- create_summary_df(
+  list.files(
+    path = "/projects/f_wj183_1/work/Sean/Kozich/priors_metaid/results_priors_0.5", 
+    pattern = ".metascope_id.csv", 
+    full.names = TRUE, 
+    recursive = TRUE), 
+  pipeline_name = "0.5"
+)
+
+priors_1.0 <- create_summary_df(
+  list.files(
+    path = "/projects/f_wj183_1/work/Sean/Kozich/priors_metaid/results_priors_1.0", 
+    pattern = ".metascope_id.csv", 
+    full.names = TRUE, 
+    recursive = TRUE), 
+  pipeline_name = "1.0"
+)
+
+priors_2.0 <- create_summary_df(
+  list.files(
+    path = "/projects/f_wj183_1/work/Sean/Kozich/priors_metaid/results_priors_2.0", 
+    pattern = ".metascope_id.csv", 
+    full.names = TRUE, 
+    recursive = TRUE), 
+  pipeline_name = "2.0"
+)
+
+priors_0<- create_summary_df(
+  list.files(
+    path = "/projects/f_wj183_1/work/Sean/Kozich/priors_metaid/results", 
+    pattern = ".metascope_id.csv", 
+    full.names = TRUE, 
+    recursive = TRUE), 
+  pipeline_name = "No Priors"
+)
+
+summary_df_final_2 <- rbind(priors_0, priors_0.005, priors_0.01, priors_0.05, priors_0.1, priors_0.5, priors_1.0, priors_2.0)
+
+summary_df_final_2 |> dplyr::filter(Species %in% c("No Call", "Incorrect Call")) |>
+  tidyr::pivot_wider(names_from = Species, values_from = prop, names_repair = "universal") |>
+  dplyr::mutate(Correct.Call = 1 - (No.Call + Incorrect.Call)) |>
+  dplyr::filter(pipeline != "Ground Truth") |>
+  dplyr::group_by(pipeline) |>
+  dplyr::group_by(name) |> 
+  ggplot(aes(x = pipeline, y = Correct.Call)) +
+  geom_boxplot() + 
+  geom_jitter() +
+  #theme(axis.text.x = element_text(angle = 90)) +
+  xlab("Sum of total priors") + 
+  ylab("Percentage of Correct Calls") +
+  stat_compare_means(label.y = 1.05, method = "anova", paired = TRUE) +
+  stat_compare_means(comparisons = list(c("No Priors", "0.005"), 
+                                        c("0.005", "0.01"), c("0.005", "0.05")), 
+                     method = "wilcox.test", 
+                     paired = FALSE)
+
+```
+# Testing Difference between groups
+```{r}
+oneway.test(prop ~ pipeline, summary_df_final_2, var.equal = FALSE)
+
+dplyr::mutate(Correct.Call = 1 - (No.Call + Incorrect.Call)) 
+wilcox.test(priors_0 |> 
+              dplyr::mutate(Correct.Call = 1 - (No.Call + Incorrect.Call)) |>
+              dplyr::select(Correct.Call), 
+            priors_1.0 |> 
+              dplyr::mutate(Correct.Call = 1 - (No.Call + Incorrect.Call)) |>
+              dplyr::select(Correct.Call),
+            paired=TRUE)
+```
+
+```{r}
+summary_df_final_3 <- rbind(priors_0, priors_0.005, priors_0.01)
+p3 <- ggplot(data = summary_df_final_3  , aes(fill = Species, y = prop, x = name)) +
+  geom_bar(position ="stack", stat = "identity")+
+  scale_fill_manual(values = wheel_colors, name = "Species") + 
+  ylab("Relative Abundance") + 
+  xlab("") +
+  scale_y_continuous(breaks = seq(0,1, by = 0.1)) +
+  facet_grid(~pipeline) + 
+  theme(axis.text.x=element_blank(),
+        axis.ticks.x = element_blank(),
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        panel.background = element_blank())
+plot(p3) 
+```
+
+HMP priors
+```{r}
+hmp_priors<- create_summary_df(
+  list.files(
+    path = "/projects/f_wj183_1/work/Sean/Kozich/priors_metaid/results_hmp_priors", 
+    pattern = ".metascope_id.csv", 
+    full.names = TRUE, 
+    recursive = TRUE), 
+  pipeline_name = "MetaScope HMP Priors"
+)
+
+rbind(priors_0, hmp_priors, priors_1.0) |> 
+  dplyr::filter(Species %in% c("No Call", "Incorrect Call")) |>
+  tidyr::pivot_wider(names_from = Species, values_from = prop, names_repair = "universal") |>
+  dplyr::mutate(Correct.Call = 1 - (No.Call + Incorrect.Call)) |>
+  dplyr::filter(pipeline != "Ground Truth") |>
+  dplyr::group_by(pipeline) |>
+  dplyr::group_by(name) |> 
+  ggplot(aes(x = pipeline, y = Correct.Call)) +
+  geom_boxplot() + 
+  geom_jitter()
+
+```
+```{r}
+hmp_test <- rbind(priors_0, hmp_priors, priors_1.0) |>
+  dplyr::filter(Species %in% c("No Call", "Incorrect Call")) |>
+  tidyr::pivot_wider(names_from = Species, values_from = prop, names_repair = "universal") |>
+  dplyr::mutate(Correct.Call = 1 - (No.Call + Incorrect.Call))
+
+hmp_test |>
+  group_by(pipeline) |>
+  shapiro_test(Correct.Call)
+
+
+oneway.test(Correct.Call ~ pipeline, hmp_test , var.equal = FALSE)
+
+pwc <- pairwise.t.test(
+  x = hmp_test$Correct.Call,
+  g = hmp_test$pipeline,
+  paired = TRUE,
+  p.adjust.method = "bonferroni"
+)
+
+library(ggpubr)
+
+ggplot(hmp_test, aes(x=pipeline, y=Correct.Call)) + 
+  geom_boxplot() +
+  stat_compare_means(label.y = 1.05, method = "anova", paired = TRUE) +
+  stat_compare_means(comparisons = list(c("No Priors", "MetaScope HMP Priors"), 
+                                        c("No Priors", "1.0"), c("MetaScope HMP Priors", "1.0")), 
+                     method = "wilcox.test", 
+                     paired = TRUE) +
+  geom_point() +
+  geom_jitter()
+
+```
+
+
+
+```{r}
+library("tabula")
+
+heterogeneity(priors_0, method = "shannon")
+```
+
+
+```{R}
+results_priors_metaid <- create_summary_df(
+  list.files(
+    path = "data_processed/kozich_2013/results_metablast", 
+    pattern = ".metascope_id.csv", 
+    full.names = TRUE, 
+    recursive = TRUE), 
+  pipeline_name = "MetaScope"
+)
+
+create_summary_df <- function(csv_paths, pipeline_name) {
+  summary_df <- data.frame(
+    Species = c("No Call", "Incorrect Call",priors_df$species))
+  n = 1
+  for (i in csv_paths) {
+    # Get Sample Names
+    sample_name <- sub("\\..*$", "", basename(i))
+    # Clean MetaBlast Table
+    metascope_df <- read.csv(i, head = TRUE)
+    head(metascope_df)
+    metascope_df <- metascope_df |>
+      dplyr::select(species, reassigned_read_count) |>
+      dplyr::mutate_if(is.numeric, ~ . / sum(.))
+    colnames(metascope_df) <- c("Species", sample_name)
+    #metascope_df[metascope_df == "Phocaeicola vulgatus"] <- 'Bacteroides vulgatus'
+    #metascope_df[metascope_df == "Schaalia odontolytica"] <- 'Actinomyces odontolyticus'
+    #metascope_df[metascope_df == "Cutibacterium acnes"] <- 'Propionibacterium acnes'
+    #metascope_df[metascope_df == "Cereibacter sphaeroides"] <- 'Rhodobacter sphaeroides'
+    
+    
+    
+    summary_df <- dplyr::left_join(summary_df, metascope_df, by = "Species")
+    summary_df[is.na(summary_df)] <- 0
+    
+    no_call.metascope <- metascope_df |>
+      dplyr::filter(is.na(Species)) |>
+      dplyr::select(sample_name) |>
+      sum()
+    correct_call.metascope <- metascope_df |>
+      dplyr::filter(Species %in% priors_df$species) |>
+      dplyr::select(sample_name) |>
+      sum()
+    incorrect_call.metascope <- 1 - correct_call.metascope - no_call.metascope
+    
+    summary_df[1,n+1] <- no_call.metascope
+    summary_df[2,n+1] <- incorrect_call.metascope
+    n = n + 1
+  } 
+  
+  
+  summary_df_long <- tidyr::pivot_longer(
+    summary_df, 
+    cols = c(2:ncol(summary_df)), 
+    values_to = "prop"
+  )
+  summary_df_long$Species <- factor(summary_df_long$Species, 
+                                    levels = c("No Call", "Incorrect Call", priors_df$species))
+  summary_df_long$name <- factor(summary_df_long$name)
+  summary_df_long$pipeline <- factor(rep(pipeline_name, nrow(summary_df_long)))
+  return(summary_df_long)
+}
+
+results_priors_metablast <- create_summary_df(
+  list.files(
+    path = "data_processed/kozich_2013/results_metablast", 
+    pattern = ".metascope_blast_reassigned.csv", 
+    full.names = TRUE, 
+    recursive = TRUE), 
+  pipeline_name = "MetaBlast"
+)
+
+
+summary_df_final_3 <- rbind(results_priors_metaid, results_priors_metablast)
+
+summary_df_final_3 |> dplyr::filter(Species %in% c("No Call", "Incorrect Call")) |>
+  tidyr::pivot_wider(names_from = Species, values_from = prop, names_repair = "universal") |>
+  dplyr::mutate(Correct.Call = 1 - (No.Call + Incorrect.Call)) |>
+  dplyr::filter(pipeline != "Ground Truth") |>
+  dplyr::group_by(pipeline) |>
+  dplyr::group_by(name) |> 
+  ggplot(aes(x = pipeline, y = Correct.Call)) +
+  geom_violin() + 
+  geom_point() +
+  #theme(axis.text.x = element_text(angle = 90)) +
+  xlab("Sum of total priors") + 
+  ylab("Percentage of Correct Calls") +
+  stat_compare_means(comparisons = list(c("MetaScope", "MetaBlast")), 
+                     method = "t.test", 
+                     paired = TRUE) + 
+  geom_line(aes(group = name))
+  
+dplyr::left_join(results_priors_metaid, results_priors_metablast, by = c("Species","name")) |>
+  dplyr::filter(Species == "Incorrect Call") |> 
+  dplyr::mutate(diff = prop.x - prop.y) |>
+  ggplot(aes(y = diff, x = name)) +
+  geom_point() + 
+  geom_hline(yintercept = 0)
+  
+```
+
+```{r}
+create_summary_df <- function(csv_paths, pipeline_name) {
+  summary_df <- data.frame(
+    Species = c("No Call", "Incorrect Call",priors_df$species))
+  n = 1
+  for (i in csv_paths) {
+    # Get Sample Names
+    sample_name <- sub("\\..*$", "", basename(i))
+    # Clean MetaBlast Table
+    metascope_df <- read.csv(i, head = TRUE)
+    head(metascope_df)
+    metascope_df <- metascope_df |>
+      dplyr::select(Genome, read_count) |>
+      dplyr::mutate_if(is.numeric, ~ . / sum(.))
+    colnames(metascope_df) <- c("Species", sample_name)
+    #metascope_df[metascope_df == "Phocaeicola vulgatus"] <- 'Bacteroides vulgatus'
+    #metascope_df[metascope_df == "Schaalia odontolytica"] <- 'Actinomyces odontolyticus'
+    #metascope_df[metascope_df == "Cutibacterium acnes"] <- 'Propionibacterium acnes'
+    #metascope_df[metascope_df == "Cereibacter sphaeroides"] <- 'Rhodobacter sphaeroides'
+    
+    
+    
+    summary_df <- dplyr::left_join(summary_df, metascope_df, by = "Species")
+    summary_df[is.na(summary_df)] <- 0
+    
+    no_call.metascope <- metascope_df |>
+      dplyr::filter(is.na(Species)) |>
+      dplyr::select(sample_name) |>
+      sum()
+    correct_call.metascope <- metascope_df |>
+      dplyr::filter(Species %in% priors_df$species) |>
+      dplyr::select(sample_name) |>
+      sum()
+    incorrect_call.metascope <- 1 - correct_call.metascope - no_call.metascope
+    
+    summary_df[1,n+1] <- no_call.metascope
+    summary_df[2,n+1] <- incorrect_call.metascope
+    n = n + 1
+  } 
+  
+  
+  summary_df_long <- tidyr::pivot_longer(
+    summary_df, 
+    cols = c(2:ncol(summary_df)), 
+    values_to = "prop"
+  )
+  summary_df_long$Species <- factor(summary_df_long$Species, 
+                                    levels = c("No Call", "Incorrect Call", priors_df$species))
+  summary_df_long$name <- factor(summary_df_long$name)
+  summary_df_long$pipeline <- factor(rep(pipeline_name, nrow(summary_df_long)))
+  return(summary_df_long)
+}
+
+results_priors_metaid_5 <- create_summary_df(
+  list.files(
+    path = "data_processed/kozich_2013/results_metablast_bowtie_5", 
+    pattern = ".metascope_id.csv", 
+    full.names = TRUE, 
+    recursive = TRUE), 
+  pipeline_name = "MetaScope"
+)
+
+create_summary_df <- function(csv_paths, pipeline_name) {
+  summary_df <- data.frame(
+    Species = c("No Call", "Incorrect Call",priors_df$species))
+  n = 1
+  for (i in csv_paths) {
+    # Get Sample Names
+    sample_name <- sub("\\..*$", "", basename(i))
+    # Clean MetaBlast Table
+    metascope_df <- read.csv(i, head = TRUE)
+    head(metascope_df)
+    metascope_df <- metascope_df |>
+      dplyr::select(species, reassigned_read_count) |>
+      dplyr::mutate_if(is.numeric, ~ . / sum(.))
+    colnames(metascope_df) <- c("Species", sample_name)
+    #metascope_df[metascope_df == "Phocaeicola vulgatus"] <- 'Bacteroides vulgatus'
+    #metascope_df[metascope_df == "Schaalia odontolytica"] <- 'Actinomyces odontolyticus'
+    #metascope_df[metascope_df == "Cutibacterium acnes"] <- 'Propionibacterium acnes'
+    #metascope_df[metascope_df == "Cereibacter sphaeroides"] <- 'Rhodobacter sphaeroides'
+    
+    
+    
+    summary_df <- dplyr::left_join(summary_df, metascope_df, by = "Species")
+    summary_df[is.na(summary_df)] <- 0
+    
+    no_call.metascope <- metascope_df |>
+      dplyr::filter(is.na(Species)) |>
+      dplyr::select(sample_name) |>
+      sum()
+    correct_call.metascope <- metascope_df |>
+      dplyr::filter(Species %in% priors_df$species) |>
+      dplyr::select(sample_name) |>
+      sum()
+    incorrect_call.metascope <- 1 - correct_call.metascope - no_call.metascope
+    
+    summary_df[1,n+1] <- no_call.metascope
+    summary_df[2,n+1] <- incorrect_call.metascope
+    n = n + 1
+  } 
+  
+  
+  summary_df_long <- tidyr::pivot_longer(
+    summary_df, 
+    cols = c(2:ncol(summary_df)), 
+    values_to = "prop"
+  )
+  summary_df_long$Species <- factor(summary_df_long$Species, 
+                                    levels = c("No Call", "Incorrect Call", priors_df$species))
+  summary_df_long$name <- factor(summary_df_long$name)
+  summary_df_long$pipeline <- factor(rep(pipeline_name, nrow(summary_df_long)))
+  return(summary_df_long)
+}
+
+results_priors_metablast_5 <- create_summary_df(
+  list.files(
+    path = "data_processed/kozich_2013/results_metablast_bowtie_5", 
+    pattern = ".metascope_blast_reassigned.csv", 
+    full.names = TRUE, 
+    recursive = TRUE), 
+  pipeline_name = "MetaBlast"
+)
+
+
+summary_df_final_4 <- rbind(results_priors_metaid_5, results_priors_metablast_5)
+
+summary_df_final_4 |> dplyr::filter(Species %in% c("No Call", "Incorrect Call")) |>
+  tidyr::pivot_wider(names_from = Species, values_from = prop, names_repair = "universal") |>
+  dplyr::mutate(Correct.Call = 1 - (No.Call + Incorrect.Call)) |>
+  dplyr::filter(pipeline != "Ground Truth") |>
+  dplyr::group_by(pipeline) |>
+  dplyr::group_by(name) |> 
+  ggplot(aes(x = pipeline, y = Correct.Call)) +
+  geom_violin() + 
+  geom_point() +
+  #theme(axis.text.x = element_text(angle = 90)) +
+  xlab("Sum of total priors") + 
+  ylab("Percentage of Correct Calls") +
+  stat_compare_means(comparisons = list(c("MetaScope", "MetaBlast")), 
+                     method = "t.test", 
+                     paired = TRUE) + 
+  geom_line(aes(group = name))
+  
+dplyr::left_join(results_priors_metaid_5, results_priors_metablast_5, by = c("Species","name")) |>
+  dplyr::filter(Species == "Incorrect Call") |> 
+  dplyr::mutate(diff = prop.x - prop.y) |>
+  ggplot(aes(y = diff, x = name)) +
+  geom_point() + 
+  geom_hline(yintercept = 0) + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) + 
+  ggtitle("MetaBlast Improvement")
+```
 

@@ -301,7 +301,7 @@ EnhancedVolcano(deseq_dada2_nasal_res,
 pargs <- list(rep.num=50, seed=10010, ncores=4)
 se_ms <- spiec.easi(ps_dada2, method='mb', lambda.min.ratio=1e-2,
                     sel.criterion='bstars', pulsar.select=TRUE,
-                    nlambda=20, pulsar.params=pargs))
+                    nlambda=20, pulsar.params=pargs)
 ig2.mb <- adj2igraph(getRefit(se.mb.amgut2),  vertex.attr=list(name=taxa_names(amgut2.filt.phy)))
 plot_network(ig2.mb, amgut2.filt.phy, type='taxa', color="Rank3")
 ```
