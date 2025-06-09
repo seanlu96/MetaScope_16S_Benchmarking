@@ -1,0 +1,64 @@
+"Kingdom","Phylum","Class","Order","Family","Genus","Species","reads_count"
+"Bacteria","Firmicutes","Bacilli","Staphylococcales","Staphylococcaceae","Staphylococcus",NA,7873
+"Bacteria","Proteobacteria","Gammaproteobacteria","Pseudomonadales","Moraxellaceae","Acinetobacter",NA,5351
+"Bacteria","Firmicutes","Bacilli","Bacillales","Bacillaceae","Bacillus",NA,4998
+"Bacteria","Firmicutes","Clostridia","Clostridiales","Clostridiaceae","Clostridium sensu stricto 1",NA,3031
+"Bacteria","Proteobacteria","Gammaproteobacteria","Burkholderiales","Neisseriaceae","Neisseria","meningitidis",2780
+"Bacteria","Deinococcota","Deinococci","Deinococcales","Deinococcaceae","Deinococcus","radiodurans",2763
+"Bacteria","Firmicutes","Bacilli","Lactobacillales","Listeriaceae","Listeria",NA,2556
+"Bacteria","Firmicutes","Bacilli","Lactobacillales","Streptococcaceae","Streptococcus",NA,2354
+"Bacteria","Proteobacteria","Gammaproteobacteria","Pseudomonadales","Pseudomonadaceae","Pseudomonas",NA,2263
+"Bacteria","Campylobacterota","Campylobacteria","Campylobacterales","Helicobacteraceae","Helicobacter","pylori",2151
+"Bacteria","Firmicutes","Bacilli","Lactobacillales","Enterococcaceae","Enterococcus",NA,2025
+"Bacteria","Firmicutes","Bacilli","Lactobacillales","Streptococcaceae","Streptococcus","mutans",2006
+"Bacteria","Bacteroidota","Bacteroidia","Bacteroidales","Bacteroidaceae","Bacteroides","vulgatus",1967
+"Bacteria","Actinobacteriota","Actinobacteria","Actinomycetales","Actinomycetaceae","Actinomyces","odontolyticus",1964
+"Bacteria","Proteobacteria","Gammaproteobacteria","Enterobacterales","Enterobacteriaceae","Escherichia-Shigella",NA,1948
+"Bacteria","Firmicutes","Bacilli","Lactobacillales","Lactobacillaceae","Lactobacillus",NA,1194
+"Bacteria","Proteobacteria","Alphaproteobacteria","Rhodobacterales","Rhodobacteraceae","Rhodobacter",NA,1028
+"Bacteria","Bacteroidota","Bacteroidia","Bacteroidales","Porphyromonadaceae","Porphyromonas","gingivalis",800
+"Bacteria","Campylobacterota","Campylobacteria","Campylobacterales","Helicobacteraceae","Helicobacter",NA,340
+"Bacteria","Bacteroidota","Bacteroidia","Bacteroidales","Prevotellaceae","Prevotella_9",NA,326
+"Bacteria","Deinococcota","Deinococci","Deinococcales","Deinococcaceae","Deinococcus",NA,281
+"Bacteria","Firmicutes","Clostridia","Clostridiales","Clostridiaceae","Clostridium sensu stricto 1","beijerinckii",199
+"Bacteria","Proteobacteria","Gammaproteobacteria","Burkholderiales","Neisseriaceae","Neisseria",NA,150
+"Bacteria","Bacteroidota","Bacteroidia","Bacteroidales","Prevotellaceae","Prevotella_9","copri",127
+"Bacteria","Actinobacteriota","Actinobacteria","Actinomycetales","Actinomycetaceae","Actinomyces",NA,85
+"Bacteria","Bacteroidota","Bacteroidia","Bacteroidales","Bacteroidaceae","Bacteroides",NA,55
+"Bacteria","Firmicutes","Negativicutes","Acidaminococcales","Acidaminococcaceae","Phascolarctobacterium","faecium",50
+"Bacteria","Firmicutes","Bacilli","Bacillales",NA,NA,NA,33
+"Bacteria","Firmicutes","Clostridia","Oscillospirales","Ruminococcaceae","Faecalibacterium","prausnitzii",15
+"Bacteria","Firmicutes","Bacilli","Bacillales","Planococcaceae","Viridibacillus",NA,14
+"Bacteria","Bacteroidota","Bacteroidia","Bacteroidales","Bacteroidaceae","Bacteroides","caccae",13
+"Bacteria","Bacteroidota","Bacteroidia","Bacteroidales","Bacteroidaceae","Bacteroides","massiliensis",12
+"Bacteria","Firmicutes","Bacilli","Bacillales","Bacillaceae",NA,NA,12
+"Bacteria","Acidobacteriota","Vicinamibacteria","Vicinamibacterales",NA,NA,NA,11
+"Bacteria","Firmicutes","Bacilli","Lactobacillales",NA,NA,NA,10
+"Bacteria","Bacteroidota","Bacteroidia","Bacteroidales","Tannerellaceae","Parabacteroides","merdae",9
+"Bacteria","Firmicutes","Bacilli","Staphylococcales","Staphylococcaceae",NA,NA,9
+"Bacteria","Bacteroidota","Bacteroidia","Bacteroidales","Rikenellaceae","Alistipes","putredinis",8
+"Bacteria","Acidobacteriota","Vicinamibacteria","Vicinamibacterales","Vicinamibacteraceae",NA,NA,7
+"Bacteria","Firmicutes","Clostridia","Lachnospirales","Lachnospiraceae","[Ruminococcus] torques group",NA,7
+"Bacteria","Bacteroidota","Bacteroidia","Bacteroidales","Prevotellaceae","Paraprevotella",NA,6
+"Bacteria","Proteobacteria","Gammaproteobacteria","Enterobacterales","Enterobacteriaceae",NA,NA,6
+"Bacteria","Bacteroidota","Bacteroidia","Bacteroidales","Barnesiellaceae","Barnesiella",NA,5
+"Bacteria","Firmicutes","Bacilli","Lactobacillales","Enterococcaceae","Enterococcus","faecalis",5
+"Bacteria","Firmicutes","Bacilli","Lactobacillales","Enterococcaceae",NA,NA,5
+"Bacteria","Firmicutes","Bacilli",NA,NA,NA,NA,5
+"Bacteria","Firmicutes","Clostridia","Oscillospirales","Ruminococcaceae","Ruminococcus","callidus",5
+"Bacteria","Firmicutes","Clostridia","Oscillospirales","Ruminococcaceae","Subdoligranulum",NA,5
+"Bacteria","Actinobacteriota","Actinobacteria","Micrococcales",NA,NA,NA,4
+"Bacteria","Bacteroidota","Bacteroidia","Bacteroidales","Marinifilaceae","Odoribacter",NA,4
+"Bacteria","Firmicutes","Clostridia","Oscillospirales","Oscillospiraceae","UCG-002",NA,4
+"Bacteria","Proteobacteria","Gammaproteobacteria","Burkholderiales","Nitrosomonadaceae","MND1",NA,4
+"Bacteria","Firmicutes","Bacilli","Lactobacillales","Lactobacillaceae",NA,NA,3
+"Bacteria","Firmicutes","Clostridia","Oscillospirales","Oscillospiraceae","NK4A214 group",NA,3
+"Bacteria","Firmicutes","Clostridia","Oscillospirales","Ruminococcaceae",NA,NA,3
+"Bacteria","Actinobacteriota","Actinobacteria","Propionibacteriales","Propionibacteriaceae","Cutibacterium",NA,2
+"Bacteria","Desulfobacterota","Desulfovibrionia","Desulfovibrionales","Desulfovibrionaceae","Desulfovibrio",NA,2
+"Bacteria","Firmicutes","Clostridia","Oscillospirales","[Eubacterium] coprostanoligenes group",NA,NA,2
+"Bacteria","Proteobacteria","Alphaproteobacteria","Rhodobacterales","Rhodobacteraceae",NA,NA,2
+"Bacteria","Verrucomicrobiota","Verrucomicrobiae","Verrucomicrobiales","Akkermansiaceae","Akkermansia","muciniphila",2
+"Bacteria","Firmicutes","Bacilli","Bacillales","Planococcaceae",NA,NA,1
+"Bacteria","Proteobacteria","Gammaproteobacteria","Pseudomonadales","Moraxellaceae",NA,NA,1
+"Bacteria","Proteobacteria","Gammaproteobacteria","Pseudomonadales","Pseudomonadaceae",NA,NA,1

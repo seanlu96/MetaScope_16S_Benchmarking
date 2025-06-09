@@ -1,0 +1,22 @@
+species,taxid,prior_weights
+Acinetobacter baumannii,470,0.0002380952
+Schaalia odontolytica,1660,0.0002380952
+Bacillus cereus,1396,0.0002380952
+Phocaeicola vulgatus,821,0.0002380952
+Clostridium beijerinckii,1520,0.0002380952
+Deinococcus radiodurans,1299,0.0002380952
+Enterococcus faecalis,1351,0.0002380952
+Escherichia coli,562,0.0002380952
+Helicobacter pylori,210,0.0002380952
+Lactobacillus gasseri,1596,0.0002380952
+Listeria monocytogenes,1639,0.0002380952
+Neisseria meningitidis,487,0.0002380952
+Porphyromonas gingivalis,837,0.0002380952
+Cutibacterium acnes,1747,0.0002380952
+Pseudomonas aeruginosa,287,0.0002380952
+Cereibacter sphaeroides,1063,0.0002380952
+Staphylococcus aureus,1280,0.0002380952
+Staphylococcus epidermidis,1282,0.0002380952
+Streptococcus agalactiae,1311,0.0002380952
+Streptococcus mutans,1309,0.0002380952
+Streptococcus pneumoniae,1313,0.0002380952

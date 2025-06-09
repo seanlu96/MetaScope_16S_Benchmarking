@@ -1,0 +1,35 @@
+"Kingdom","Phylum","Class","Order","Family","Genus","Species","reads_count"
+"Bacteria","Firmicutes","Bacilli","Staphylococcales","Staphylococcaceae","Staphylococcus",NA,2057
+"Bacteria","Firmicutes","Bacilli","Bacillales","Bacillaceae","Bacillus",NA,1397
+"Bacteria","Proteobacteria","Gammaproteobacteria","Burkholderiales","Neisseriaceae","Neisseria","meningitidis",982
+"Bacteria","Firmicutes","Clostridia","Clostridiales","Clostridiaceae","Clostridium sensu stricto 1",NA,939
+"Bacteria","Campylobacterota","Campylobacteria","Campylobacterales","Helicobacteraceae","Helicobacter","pylori",930
+"Bacteria","Deinococcota","Deinococci","Deinococcales","Deinococcaceae","Deinococcus","radiodurans",898
+"Bacteria","Proteobacteria","Gammaproteobacteria","Pseudomonadales","Moraxellaceae","Acinetobacter",NA,839
+"Bacteria","Firmicutes","Bacilli","Lactobacillales","Streptococcaceae","Streptococcus",NA,740
+"Bacteria","Proteobacteria","Gammaproteobacteria","Pseudomonadales","Pseudomonadaceae","Pseudomonas",NA,737
+"Bacteria","Actinobacteriota","Actinobacteria","Actinomycetales","Actinomycetaceae","Actinomyces","odontolyticus",718
+"Bacteria","Proteobacteria","Gammaproteobacteria","Enterobacterales","Enterobacteriaceae","Escherichia-Shigella",NA,701
+"Bacteria","Bacteroidota","Bacteroidia","Bacteroidales","Bacteroidaceae","Bacteroides","vulgatus",696
+"Bacteria","Firmicutes","Bacilli","Lactobacillales","Enterococcaceae","Enterococcus",NA,635
+"Bacteria","Firmicutes","Bacilli","Lactobacillales","Streptococcaceae","Streptococcus","mutans",623
+"Bacteria","Firmicutes","Bacilli","Lactobacillales","Listeriaceae","Listeria",NA,603
+"Bacteria","Firmicutes","Bacilli","Lactobacillales","Lactobacillaceae","Lactobacillus",NA,371
+"Bacteria","Bacteroidota","Bacteroidia","Bacteroidales","Porphyromonadaceae","Porphyromonas","gingivalis",291
+"Bacteria","Proteobacteria","Alphaproteobacteria","Rhodobacterales","Rhodobacteraceae","Rhodobacter",NA,274
+"Bacteria","Firmicutes","Clostridia","Clostridiales","Clostridiaceae","Clostridium sensu stricto 1","beijerinckii",72
+"Bacteria","Bacteroidota","Bacteroidia","Bacteroidales","Prevotellaceae","Prevotella_9",NA,30
+"Bacteria","Actinobacteriota","Actinobacteria","Propionibacteriales","Propionibacteriaceae","Cutibacterium",NA,29
+"Bacteria","Firmicutes","Bacilli","Bacillales","Planococcaceae","Viridibacillus",NA,18
+"Bacteria","Bacteroidota","Bacteroidia","Bacteroidales","Prevotellaceae","Prevotella_9","copri",13
+"Bacteria","Firmicutes","Bacilli","Lactobacillales",NA,NA,NA,11
+"Bacteria","Firmicutes","Bacilli","Bacillales",NA,NA,NA,7
+"Bacteria","Proteobacteria","Gammaproteobacteria","Burkholderiales","Neisseriaceae","Neisseria",NA,6
+"Bacteria","Deinococcota","Deinococci","Deinococcales","Deinococcaceae","Deinococcus",NA,4
+"Bacteria","Firmicutes","Negativicutes","Acidaminococcales","Acidaminococcaceae","Phascolarctobacterium","faecium",4
+"Bacteria","Proteobacteria","Gammaproteobacteria","Enterobacterales",NA,NA,NA,4
+"Bacteria","Proteobacteria","Alphaproteobacteria","Rhodobacterales","Rhodobacteraceae",NA,NA,3
+"Bacteria","Bacteroidota","Bacteroidia","Bacteroidales","Barnesiellaceae","Barnesiella",NA,2
+"Bacteria","Firmicutes","Bacilli","Bacillales","Bacillaceae",NA,NA,2
+"Bacteria","Firmicutes","Bacilli","Staphylococcales","Staphylococcaceae",NA,NA,2
+"Bacteria","Firmicutes","Bacilli","Lactobacillales","Lactobacillaceae","Amylolactobacillus",NA,1
