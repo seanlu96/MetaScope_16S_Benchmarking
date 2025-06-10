@@ -20,6 +20,9 @@ library("ggpubr")
 library("phylosmith")
 library("DESeq2")
 library("EnhancedVolcano")
+library("microbiome")
+library("eulerr")
+library("ggVennDiagram")
 ```
 
 
@@ -279,46 +282,79 @@ abundance_heatmap(ps_dada2_filt, classification = 'Genus',
 ## Plotting Alpha Diversity
 ```{r Alpha Diversity}
 p2_1 <- plot_richness(ps_dada2_oral, measures=c("Observed", "Chao1", "ACE", "Shannon", "Simpson", "InvSimpson", "Fisher"), x = "status") + 
-  stat_compare_means(label = "p.signif", label.x = 1.5, comparisons = list(c("Control", "TB"))) + 
+  stat_compare_means(label = "p.signif", label.x = 1.5, comparisons = list(c("Control", "TB")),
+                     method = "wilcox.test") + 
   geom_boxplot()
 
-p2_2 <- plot_richness(ps_ms_oral, measures=c("Observed", "Chao1", "ACE", "Shannon", "Simpson", "InvSimpson", "Fisher"), x = "status") + 
-  stat_compare_means(label = "p.signif", label.x = 1.5, comparisons = list(c("Control", "TB"))) + 
+p2_2 <- plot_richness(ps_ms_oral, measures=c("Observed", "Chao1", "ACE", "Shannon", "Simpson", "InvSimpson", "Fisher"), x = "status")+ 
+  stat_compare_means(label = "p.signif", label.x = 1.5, comparisons = list(c("Control", "TB")),
+                     method = "wilcox.test") + 
   geom_boxplot()
 
 p2_3 <- plot_richness(ps_dada2_nasal, measures=c("Observed", "Chao1", "ACE", "Shannon", "Simpson", "InvSimpson", "Fisher"), x = "status") + 
-  stat_compare_means(label = "p.signif", label.x = 1.5, comparisons = list(c("Control", "TB"))) + 
+  stat_compare_means(label = "p.signif", label.x = 1.5, comparisons = list(c("Control", "TB")), method = "wilcox.test") + 
   geom_boxplot()
 
 p2_4 <- plot_richness(ps_ms_nasal, measures=c("Observed", "Chao1", "ACE", "Shannon", "Simpson", "InvSimpson", "Fisher"), x = "status") + 
-  stat_compare_means(label = "p.signif", label.x = 1.5, comparisons = list(c("Control", "TB"))) + 
+  stat_compare_means(label = "p.signif", label.x = 1.5, comparisons = list(c("Control", "TB")),method = "wilcox.test") + 
   geom_boxplot()
+
+ggarrange(p2_1, p2_2, p2_3, p2_4, labels = "AUTO")
 ```
 
 ## PCOA Plots
 ```{r PCoA plots}
 ps_ms.ord <- ordinate(ps_ms, "PCoA", "bray")
-plot_ordination(ps_ms, ps_ms.ord, type="samples", color="status", shape="Sample_type", title="Samples") + 
+p3_1 <- plot_ordination(ps_ms, ps_ms.ord, type="samples", color="status", shape="Sample_type", title="MetaScope Analysis") + 
   geom_point(size=3) + 
-  stat_ellipse(
-    aes(linetype=Sample_type))
+  stat_ellipse(aes(linetype=Sample_type)) 
+  
 
 ps_dada2.ord <- ordinate(ps_dada2, "PCoA", "bray")
-plot_ordination(ps_dada2, ps_dada2.ord, type="samples", color="status", shape="Sample_type", title="Samples") + 
+p3_2 <- plot_ordination(ps_dada2, ps_dada2.ord, type="samples", color="status", shape="Sample_type", title="DADA2 Analysis") + 
   geom_point(size=3) + 
-  stat_ellipse(
-    aes(linetype=Sample_type))
+  stat_ellipse(aes(linetype=Sample_type))
+ggarrange(p3_1, p3_2, labels = "AUTO", common.legend = TRUE, legend = "bottom")
 
 ```
 
+## Core Microbiome Analysis
 ```{r}
-taxa_core_graph(ps_ms, treatment = NULL, subset = NULL, 
-  frequencies = seq(0.1, 1, 0.1), abundance_thresholds = seq(0.01, 1, 0.01), 
-  colors = 'default')
+ps_dada2_rel <- microbiome::transform(ps_dada2, "compositional")
+ps_ms_rel <- microbiome::transform(ps_ms, "compositional")
 
-taxa_core_graph(ps_dada2, treatment = NULL, subset = NULL, 
-  frequencies = seq(0.1, 1, 0.1), abundance_thresholds = seq(0.01, 1, 0.01), 
-  colors = 'default')
+list_core_ms <- c()
+
+groups <- list(c("TB", "Sputum"), c("TB", "Nasal"), c("TB", "Oropharynx"),
+               c("Control", "Nasal"), c("Control", "Oropharynx"))
+for (i in 1:5){
+  ps.sub <- subset_samples(ps_ms_rel, status == groups[[i]][1] & Sample_type == groups[[i]][2])
+  core_m <- core_members(ps.sub,
+                         detection = 0.001, 
+                         prevalence = 0.2)
+  list_core_ms[[i]] <- core_m
+}
+names(list_core_ms) <- lapply(groups, function(x) paste(x, collapse = " "))
+p4_1 <- ggVennDiagram(list_core_ms, label_geom = "text", label = "count") + 
+  scale_fill_distiller(palette = "Blues") + 
+  scale_x_continuous(expand = expansion(mult = .2)) + 
+  ggtitle("MetaScope Core Microbiome")
+
+list_core_dada <- c() # an empty object to store information
+for (i in 1:5){
+  ps.sub <- subset_samples(ps_dada2_rel, status == groups[[i]][1] & Sample_type == groups[[i]][2])
+  core_m <- core_members(ps.sub,
+                         detection = 0.001,
+                         prevalence = 0.2)
+  list_core_dada[[i]] <- core_m
+}
+names(list_core_dada) <- lapply(groups, function(x) paste(x, collapse = " "))
+p4_2 <- ggVennDiagram(list_core_dada, label_geom = "text", label = "count") + 
+  scale_fill_distiller(palette = "Blues") + 
+  scale_x_continuous(expand = expansion(mult = .2)) + 
+  ggtitle("DADA2 Core Microbiome")
+
+ggarrange(p4_1, p4_2, labels = "AUTO")
 ```
 
 ```{r}
@@ -372,16 +408,4 @@ EnhancedVolcano(deseq_dada2_nasal_res,
   y = 'pvalue')
 
 ```
-<<<<<<< HEAD
-=======
 
-## Network Analysis
-```{r}
-pargs <- list(rep.num=50, seed=10010, ncores=4)
-se_ms <- spiec.easi(ps_dada2, method='mb', lambda.min.ratio=1e-2,
-                    sel.criterion='bstars', pulsar.select=TRUE,
-                    nlambda=20, pulsar.params=pargs)
-ig2.mb <- adj2igraph(getRefit(se.mb.amgut2),  vertex.attr=list(name=taxa_names(amgut2.filt.phy)))
-plot_network(ig2.mb, amgut2.filt.phy, type='taxa', color="Rank3")
-```
->>>>>>> e359b91f05cd333629b40d879e8244f485572e24
