@@ -29,45 +29,61 @@ library("ggVennDiagram")
 ## Load in processed Data
 ```{r, eval=TRUE, include=TRUE}
 ps_dada2 <- readRDS("data_processed/botero_2014/ps_dada2.rds")
+ps_qiime2 <- readRDS("data_processed/botero_2014/ps_qiime2.rds")
 ps_ms <- readRDS("data_processed/botero_2014/ps_metascope_priors_trimmed.rds")
 
 ps_dada2_oral <- subset_samples(ps_dada2, Sample_type == "Oropharynx")
+ps_qiime2_oral <- subset_samples(ps_qiime2, Sample_type == "Oropharynx")
 ps_ms_oral <- subset_samples(ps_ms, Sample_type == "Oropharynx")
 ps_dada2_nasal <- subset_samples(ps_dada2, Sample_type == "Nasal")
+ps_qiime2_nasal <- subset_samples(ps_qiime2, Sample_type == "Nasal")
 ps_ms_nasal <- subset_samples(ps_ms, Sample_type == "Nasal")
 
-
+# Use ps_melt to generate tidy format dataframes
 dada2_df <- psmelt(ps_dada2) |> 
-  dplyr::mutate(Species = ifelse(is.na(Species), NA, paste0(Genus, " ", Species)))
+  dplyr::mutate(Species = ifelse(is.na(Species), NA, paste0(Genus, " ", Species))) |>
+  dplyr::rename(Superkingdom = Kingdom)
 dada2_df$pipeline = "DADA2"
+
+qiime2_df <- psmelt(ps_qiime2) |>
+  dplyr::select(-Confidence)
+qiime2_df$pipeline = "QIIME2"
 
 ms_df <- psmelt(ps_ms)
 ms_df$pipeline = "MetaScope"
-ms_df$kingdom = "Bacteria"
+ms_df$Superkingdom = "Bacteria"
 ms_df <- ms_df |>
-  dplyr::relocate(kingdom, .before = phylum)
+  dplyr::relocate(Superkingdom, .before = phylum)
 colnames(ms_df) <- c("OTU", "Sample", "Abundance", "Sequencing_Type", "Patient",
-                     "Sample_type", "status", "Kingdom", "Phylum", "Class", 
+                     "Sample_type", "status", "Superkingdom", "Phylum", "Class", 
                      "Order", "Family", "Genus", "Species", "pipeline")
+# Merge all data together
+merged_df <- rbind(dada2_df, qiime2_df, ms_df)
 
-merged_df <- rbind(dada2_df, ms_df)
 
+# Generate relative abundance psmelt dataframes
 dada2_relab_df <- phylosmith::relative_abundance(ps_dada2) |>
   phyloseq::psmelt() |> 
-  dplyr::mutate(Species = ifelse(is.na(Species), NA, paste0(Genus, " ", Species)))
+  dplyr::mutate(Species = ifelse(is.na(Species), NA, paste0(Genus, " ", Species))) |>
+  dplyr::rename(Superkingdom = Kingdom)
 dada2_relab_df$pipeline = "DADA2"
+
+qiime2_relab_df <- phylosmith::relative_abundance(ps_qiime2) |>
+  phyloseq::psmelt() |>
+  dplyr::select(-Confidence)
+qiime2_relab_df$pipeline = "QIIME2"
 
 ms_relab_df <- phylosmith::relative_abundance(ps_ms) |>
   phyloseq::psmelt()
 ms_relab_df$pipeline = "MetaScope"
-ms_relab_df$kingdom = "Bacteria"
+ms_relab_df$Superkingdom = "Bacteria"
 ms_relab_df <- ms_relab_df |>
-  dplyr::relocate(kingdom, .before = phylum)
+  dplyr::relocate(Superkingdom, .before = phylum)
 colnames(ms_relab_df) <- c("OTU", "Sample", "Abundance", "Sequencing_Type", "Patient",
-                     "Sample_type", "status", "Kingdom", "Phylum", "Class", 
+                     "Sample_type", "status", "Superkingdom", "Phylum", "Class", 
                      "Order", "Family", "Genus", "Species", "pipeline")
 
-merged_relab_df <- rbind(dada2_relab_df, ms_relab_df)
+merged_relab_df <- rbind(dada2_relab_df, qiime2_relab_df, ms_relab_df)
 ```
 The DADA2 data is generated from the `dada2_botero.Rmd` file. The MetaScope data 
 was generated from the `process_metascope_id.R` functions. 
@@ -306,15 +322,21 @@ ggarrange(p2_1, p2_2, p2_3, p2_4, labels = "AUTO")
 ```{r PCoA plots}
 ps_ms.ord <- ordinate(ps_ms, "PCoA", "bray")
 p3_1 <- plot_ordination(ps_ms, ps_ms.ord, type="samples", color="status", shape="Sample_type", title="MetaScope Analysis") + 
-  geom_point(size=3) + 
+  geom_point(size=3) +
   stat_ellipse(aes(linetype=Sample_type)) 
   
-
+set.seed(123)
 ps_dada2.ord <- ordinate(ps_dada2, "PCoA", "bray")
 p3_2 <- plot_ordination(ps_dada2, ps_dada2.ord, type="samples", color="status", shape="Sample_type", title="DADA2 Analysis") + 
   geom_point(size=3) + 
   stat_ellipse(aes(linetype=Sample_type))
-ggarrange(p3_1, p3_2, labels = "AUTO", common.legend = TRUE, legend = "bottom")
+
+set.seed(124)
+ps_qiime2.ord <- ordinate(ps_qiime2, "PCoA", "bray")
+p3_3 <- plot_ordination(ps_qiime2, ps_qiime2.ord, type="samples", color="status", shape="Sample_type", title="QIIME2 Analysis") + 
+  geom_point(size=3) + 
+  stat_ellipse(aes(linetype=Sample_type))
+ggarrange(p3_1, p3_2, p3_3, labels = "AUTO", common.legend = TRUE, legend = "bottom")
 
 ```
 
@@ -354,7 +376,7 @@ p4_2 <- ggVennDiagram(list_core_dada, label_geom = "text", label = "count") +
   scale_x_continuous(expand = expansion(mult = .2)) + 
   ggtitle("DADA2 Core Microbiome")
 
-ggarrange(p4_1, p4_2, labels = "AUTO")
+ggarrange(p4_1, p4_2, labels = "AUTO", common.legend = TRUE, legend = "right")
 ```
 
 ```{r}

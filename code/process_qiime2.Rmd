@@ -1,0 +1,58 @@
+---
+title: "process_qiime2"
+author: "Sean Lu"
+date: "`r Sys.Date()`"
+output: pdf_document
+editor_options:
+  chunk_output_type: console
+---
+```{r knitr options, include = FALSE}
+knitr::opts_chunk$set(cache=FALSE, cache.path=".cache/")
+```
+
+```{r Loading in Libraries}
+library("tidyverse")
+library("phyloseq")
+```
+
+```{r}
+qiime2_otu_table <- read.table("data_processed/kozich_2013/qiime2_results/feature_table.tsv", 
+           header = TRUE, sep = "\t")
+
+qiime2_tax_table <- read.table("data_processed/kozich_2013/qiime2_results/taxonomy.tsv",
+                               header = TRUE, sep = "\t") |>
+  separate(Taxon, into = c("Superkingdom", "Phylum", "Class", 
+                           "Order", "Family", "Genus", "Species"),
+           sep = ";", fill = "right", extra = "drop")
+```
+
+
+```{r}
+qiime2_otu_table <- read.table("data_processed/botero_2014/qiime2_results/feature_table.tsv", 
+           header = TRUE, sep = "\t")
+
+qiime2_tax_table <- read.table("data_processed/botero_2014/qiime2_results/taxonomy.tsv",
+                               header = TRUE, sep = "\t") |>
+  separate(Taxon, into = c("Superkingdom", "Phylum", "Class", 
+                           "Order", "Family", "Genus", "Species"),
+           sep = ";", fill = "right", extra = "drop") |>
+  mutate(across(Superkingdom:Species, ~ str_remove(., "^\\s*[a-z]__")))
+```
+
+```{r}
+otu_mat <- qiime2_otu_table |>
+    tibble::column_to_rownames("OTU.ID") 
+tax_mat <- qiime2_tax_table |>
+    tibble::column_to_rownames("Feature.ID")
+
+samples_df <- read.csv("data_processed/botero_2014/metadata.csv") |>
+  tibble::column_to_rownames("Run_ID") 
+otu_mat <- as.matrix(otu_mat)
+tax_mat <- as.matrix(tax_mat)
+OTU = otu_table(otu_mat, taxa_are_rows = TRUE)
+TAX = tax_table(tax_mat)
+samples = sample_data(samples_df)
+
+ps_q2 <- phyloseq(OTU, TAX, samples)
+saveRDS(ps_q2, file="data_processed/botero_2014/ps_qiime2.rds")
+```
