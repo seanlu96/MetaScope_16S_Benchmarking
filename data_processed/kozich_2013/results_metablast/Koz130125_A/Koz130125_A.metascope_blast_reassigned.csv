@@ -1,0 +1,53 @@
+superkingdom,kingdom,phylum,class,order,family,genus,species,reassigned_read_count,uniqueness_score,species_percentage_hit,genus_percentage_hit,species_contaminant_score,genus_contaminant_score,best_hit_genus,best_hit_species,blast_validated
+,,Bacillota,Bacilli,Bacillales,Staphylococcaceae,Staphylococcus,Staphylococcus aureus,4272.83333333333,7,1,1,1,0,Staphylococcus,aureus,TRUE
+,,Bacillota,Clostridia,Eubacteriales,Clostridiaceae,Clostridium,Clostridium beijerinckii,3186,4,1,1,1,0,Clostridium,beijerinckii,TRUE
+,,Bacillota,Bacilli,Bacillales,Bacillaceae,Bacillus,Bacillus cereus,2947,10,0,1,1,0,Bacillus,albus,FALSE
+,,Bacteroidota,Bacteroidia,Bacteroidales,Bacteroidaceae,Phocaeicola,Phocaeicola vulgatus,1953,1,1,1,0,0,Phocaeicola,vulgatus,TRUE
+,,Pseudomonadota,Betaproteobacteria,Neisseriales,Neisseriaceae,Neisseria,Neisseria meningitidis,1829,2,1,1,1,0,Neisseria,meningitidis,TRUE
+,,Deinococcota,Deinococci,Deinococcales,Deinococcaceae,Deinococcus,Deinococcus radiodurans,1811,1,1,1,0,0,Deinococcus,radiodurans,TRUE
+,,Pseudomonadota,Gammaproteobacteria,Moraxellales,Moraxellaceae,Acinetobacter,Acinetobacter baumannii,1666,1,1,1,0,0,Acinetobacter,baumannii,TRUE
+,,Pseudomonadota,Gammaproteobacteria,Pseudomonadales,Pseudomonadaceae,Pseudomonas,Pseudomonas aeruginosa,1611,2,1,1,1,0,Pseudomonas,aeruginosa,TRUE
+,,Bacillota,Bacilli,Lactobacillales,Streptococcaceae,Streptococcus,Streptococcus mutans,1586,1,1,1,0,0,Streptococcus,mutans,TRUE
+,,Bacillota,Bacilli,Bacillales,Listeriaceae,Listeria,Listeria innocua,1580,5,1,1,1,0,Listeria,innocua,TRUE
+,,Actinomycetota,Actinomycetes,Actinomycetales,Actinomycetaceae,Schaalia,Schaalia odontolytica,1573,1,1,1,0,0,Schaalia,odontolytica,TRUE
+,,Bacillota,Bacilli,Lactobacillales,Streptococcaceae,Streptococcus,Streptococcus agalactiae,1479,1,1,1,0,0,Streptococcus,agalactiae,TRUE
+,,Bacillota,Bacilli,Lactobacillales,Enterococcaceae,Enterococcus,Enterococcus faecalis,1401,10,0.333333333333333,1,1,0,Enterococcus,canis,FALSE
+,,Pseudomonadota,Gammaproteobacteria,Enterobacterales,Enterobacteriaceae,Escherichia,Escherichia coli,1323,16,0.5,1,1,1,Escherichia,fergusonii,FALSE
+,,Campylobacterota,Epsilonproteobacteria,Campylobacterales,Helicobacteraceae,Helicobacter,Helicobacter pylori,1228,1,1,1,0,0,Helicobacter,pylori,TRUE
+,,Bacillota,Bacilli,Lactobacillales,Lactobacillaceae,Lactobacillus,Lactobacillus gasseri,1022,6,0.5,1,1,0.5,Lactobacillus,amylolyticus,FALSE
+,,Pseudomonadota,Alphaproteobacteria,Rhodobacterales,Paracoccaceae,Cereibacter,Cereibacter sphaeroides,753,2,1,1,1,0,Cereibacter,johrii,TRUE
+,,Bacteroidota,Bacteroidia,Bacteroidales,Porphyromonadaceae,Porphyromonas,Porphyromonas gingivalis,706,1,1,1,0,0,Porphyromonas,gingivalis,TRUE
+,,Actinomycetota,Actinomycetes,Propionibacteriales,Propionibacteriaceae,Cutibacterium,Cutibacterium acnes,415,1,1,1,0,0,Cutibacterium,acnes,TRUE
+,,Bacillota,Bacilli,Lactobacillales,Streptococcaceae,Streptococcus,Streptococcus pneumoniae,203,8,1,1,1,0,Streptococcus,pneumoniae,TRUE
+,,Bacillota,Bacilli,Bacillales,Staphylococcaceae,Staphylococcus,Staphylococcus epidermidis,141.833333333333,3,1,1,1,0,Staphylococcus,capitis,TRUE
+,,Bacteroidota,Bacteroidia,Bacteroidales,Prevotellaceae,Segatella,Segatella copri,65,1,1,1,0,0,Segatella,copri,TRUE
+,,Bacillota,Bacilli,Bacillales,Staphylococcaceae,Staphylococcus,Staphylococcus ureilyticus,36,2,0,1,1,0,Staphylococcus,arlettae,FALSE
+,,Bacillota,Bacilli,Bacillales,Bacillaceae,Bacillus,Bacillus manliponensis,30,10,0,1,1,0,Bacillus,albus,FALSE
+,,Bacillota,Bacilli,Lactobacillales,Enterococcaceae,Enterococcus,Enterococcus hirae,27,16,0.857142857142857,1,1,0,Enterococcus,canis,TRUE
+,,Bacillota,Bacilli,Bacillales,Bacillaceae,Bacillus,Bacillus cytotoxicus,7,4,0,1,1,1,Bacillus,acidicola,FALSE
+,,Bacillota,Bacilli,Bacillales,Planococcaceae,Viridibacillus,Viridibacillus arvi,5,10,0,0,1,1,Bacillus,albus,FALSE
+,,Bacillota,Bacilli,Bacillales,Staphylococcaceae,Staphylococcus,Staphylococcus arlettae,5,2,1,1,1,0,Staphylococcus,arlettae,TRUE
+,,Pseudomonadota,Gammaproteobacteria,Enterobacterales,Enterobacteriaceae,Cronobacter,Cronobacter dublinensis,5,13,0,0.5,1,1,Serratia,[Pantoea] beijingensis,FALSE
+,,Bacillota,Bacilli,Bacillales,Listeriaceae,Listeria,Listeria seeligeri,5,5,1,1,1,0,Listeria,innocua,TRUE
+,,Bacillota,Negativicutes,Acidaminococcales,Acidaminococcaceae,Phascolarctobacterium,Phascolarctobacterium faecium,4,1,1,1,0,0,Phascolarctobacterium,faecium,TRUE
+,,Bacillota,Bacilli,Bacillales,Staphylococcaceae,Mammaliicoccus,Mammaliicoccus sciuri,2,6,1,1,1,1,Mammaliicoccus,fleurettii,TRUE
+,,Bacillota,Bacilli,Lactobacillales,Enterococcaceae,Enterococcus,Enterococcus saccharolyticus,2,3,1,1,1,0,Enterococcus,casseliflavus,TRUE
+,,Bacillota,Bacilli,Lactobacillales,Enterococcaceae,Melissococcus,Melissococcus plutonius,2,6,1,1,0.5,0.5,Listeria,plutonius,TRUE
+,,Bacteroidota,Bacteroidia,Bacteroidales,Bacteroidaceae,Bacteroides,Bacteroides xylanisolvens,2,1,1,1,0,0,Bacteroides,xylanisolvens,TRUE
+,,Bacteroidota,Bacteroidia,Bacteroidales,Bacteroidaceae,Phocaeicola,Phocaeicola massiliensis,2,1,1,1,0,0,Phocaeicola,massiliensis,TRUE
+,,Bacteroidota,Bacteroidia,Bacteroidales,Barnesiellaceae,Barnesiella,Barnesiella intestinihominis,2,1,1,1,0,0,Barnesiella,intestinihominis,TRUE
+,,Pseudomonadota,Gammaproteobacteria,Enterobacterales,Enterobacteriaceae,Escherichia,Escherichia marmotae,2,7,1,1,1,1,Escherichia,boydii,TRUE
+,,Bacillota,Bacilli,Bacillales,Staphylococcaceae,Staphylococcus,Staphylococcus capitis,1.33333333333333,6,1,1,1,0,Staphylococcus,aureus,TRUE
+,,Bacillota,Bacilli,Lactobacillales,Enterococcaceae,Enterococcus,Enterococcus phoeniculicola,2,7,1,1,1,0,Enterococcus,crotali,TRUE
+,,Bacillota,Clostridia,Eubacteriales,Oscillospiraceae,Faecalibacterium,Faecalibacterium prausnitzii,1,1,1,1,0,0,Faecalibacterium,prausnitzii,TRUE
+,,Bacillota,Clostridia,Eubacteriales,Oscillospiraceae,Ruminococcus,Ruminococcus callidus,1,1,1,1,0,0,Ruminococcus,callidus,TRUE
+,,Bacillota,Clostridia,Eubacteriales,Oscillospiraceae,Tepidibaculum,Tepidibaculum saccharolyticum,1,1,1,1,0,0,Tepidibaculum,saccharolyticum,TRUE
+,,Bacillota,Clostridia,Lachnospirales,Anaerotignaceae,Anaerotignum,Anaerotignum faecicola,1,1,1,1,0,0,Anaerotignum,faecicola,TRUE
+,,Bacillota,Clostridia,Lachnospirales,Lachnospiraceae,Agathobacter,Agathobacter rectalis,1,1,1,1,0,0,Agathobacter,rectalis,TRUE
+,,Bacillota,Clostridia,Lachnospirales,Lachnospiraceae,Mediterraneibacter,Mediterraneibacter faecis,1,1,1,1,0,0,Mediterraneibacter,faecis,TRUE
+,,Bacteroidota,Bacteroidia,Bacteroidales,Bacteroidaceae,Bacteroides,Bacteroides stercoris,1,1,1,1,0,0,Bacteroides,stercoris,TRUE
+,,Bacteroidota,Bacteroidia,Bacteroidales,Bacteroidaceae,Bacteroides,Bacteroides uniformis,1,1,1,1,0,0,Bacteroides,uniformis,TRUE
+,,Bacteroidota,Bacteroidia,Bacteroidales,Rikenellaceae,Alistipes,Alistipes putredinis,1,1,1,1,0,0,Alistipes,putredinis,TRUE
+,,Bacteroidota,Bacteroidia,Bacteroidales,Tannerellaceae,Parabacteroides,Parabacteroides merdae,1,1,1,1,0,0,Parabacteroides,merdae,TRUE
+,,Pseudomonadota,Gammaproteobacteria,Enterobacterales,Enterobacteriaceae,Shigella,Shigella sonnei,1,9,0,0,1,1,Cronobacter,[Pantoea] beijingensis,FALSE
+,,Pseudomonadota,Gammaproteobacteria,Enterobacterales,Pectobacteriaceae,Pectobacterium,Pectobacterium carotovorum,1,9,0,0,1,1,Cronobacter,[Pantoea] beijingensis,FALSE

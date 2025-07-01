@@ -28,9 +28,11 @@ library("ggVennDiagram")
 
 ## Load in processed Data
 ```{r, eval=TRUE, include=TRUE}
-ps_dada2 <- readRDS("data_processed/botero_2014/ps_dada2.rds")
-ps_qiime2 <- readRDS("data_processed/botero_2014/ps_qiime2.rds")
-ps_ms <- readRDS("data_processed/botero_2014/ps_metascope_priors_trimmed.rds")
+ps_dada2 <- readRDS("data_processed/botero_2014/ps_dada2.rds") |>
+  tax_glom(taxrank = "Species")
+ps_qiime2 <- readRDS("data_processed/botero_2014/ps_qiime2.rds") |>
+  tax_glom(taxrank = "Species")
+ps_ms <- readRDS("data_processed/botero_2014/ps_metascope.rds")
 
 ps_dada2_oral <- subset_samples(ps_dada2, Sample_type == "Oropharynx")
 ps_qiime2_oral <- subset_samples(ps_qiime2, Sample_type == "Oropharynx")
@@ -45,21 +47,16 @@ dada2_df <- psmelt(ps_dada2) |>
   dplyr::rename(Superkingdom = Kingdom)
 dada2_df$pipeline = "DADA2"
 
-qiime2_df <- psmelt(ps_qiime2) |>
-  dplyr::select(-Confidence)
+qiime2_df <- psmelt(ps_qiime2)
 qiime2_df$pipeline = "QIIME2"
 
 ms_df <- psmelt(ps_ms)
 ms_df$pipeline = "MetaScope"
-ms_df$Superkingdom = "Bacteria"
-ms_df <- ms_df |>
-  dplyr::relocate(Superkingdom, .before = phylum)
-colnames(ms_df) <- c("OTU", "Sample", "Abundance", "Sequencing_Type", "Patient",
-                     "Sample_type", "status", "Superkingdom", "Phylum", "Class", 
-                     "Order", "Family", "Genus", "Species", "pipeline")
+
 # Merge all data together
 merged_df <- rbind(dada2_df, qiime2_df, ms_df)
-
+merged_df$pipeline <- factor(merged_df$pipeline,
+                             levels = c("MetaScope", "DADA2", "QIIME2"))
 
 # Generate relative abundance psmelt dataframes
 dada2_relab_df <- phylosmith::relative_abundance(ps_dada2) |>
@@ -69,24 +66,21 @@ dada2_relab_df <- phylosmith::relative_abundance(ps_dada2) |>
 dada2_relab_df$pipeline = "DADA2"
 
 qiime2_relab_df <- phylosmith::relative_abundance(ps_qiime2) |>
-  phyloseq::psmelt() |>
-  dplyr::select(-Confidence)
+  phyloseq::psmelt()
 qiime2_relab_df$pipeline = "QIIME2"
 
 ms_relab_df <- phylosmith::relative_abundance(ps_ms) |>
   phyloseq::psmelt()
 ms_relab_df$pipeline = "MetaScope"
-ms_relab_df$Superkingdom = "Bacteria"
-ms_relab_df <- ms_relab_df |>
-  dplyr::relocate(Superkingdom, .before = phylum)
 colnames(ms_relab_df) <- c("OTU", "Sample", "Abundance", "Sequencing_Type", "Patient",
                      "Sample_type", "status", "Superkingdom", "Phylum", "Class", 
                      "Order", "Family", "Genus", "Species", "pipeline")
 
 merged_relab_df <- rbind(dada2_relab_df, qiime2_relab_df, ms_relab_df)
 ```
-The DADA2 data is generated from the `dada2_botero.Rmd` file. The MetaScope data 
-was generated from the `process_metascope_id.R` functions. 
+The DADA2 results are generated from the `dada2_botero.Rmd` file. 
+The QIIME2 results are generated from the `qiime2_botero.sh` script.
+The MetaScope results are generated from the `process_metascope_id.R` scripts. 
 
 ## Plotting relative abundances of MetaScope and DADA2
 ### Phylum Level Abundances
@@ -102,7 +96,8 @@ top_phyla <- merged_relab_df |>
 relab_phylum <- ggplot(merged_df, 
                         aes(x = Sample, y = Abundance, fill = Phylum)) + 
   geom_bar(position ="fill",stat = "identity") + 
-  facet_grid(cols = vars(Sample_type, status, pipeline), scales = "free_x") +
+  facet_grid(cols = vars(Sample_type, status), 
+             rows = vars(pipeline), scales = "free_x") +
   scale_fill_discrete() + 
   theme(axis.text.x=element_blank(),
         axis.ticks.x=element_blank())
@@ -142,14 +137,16 @@ top_genera <- merged_relab_df |>
   dplyr::group_by(Genus) |>
   dplyr::summarise(total_abund = sum(Abundance), .groups = "drop") |>
   dplyr::filter(!is.na(Genus)) |>
-  slice_max(order_by=total_abund, n = 25) |>
+  slice_max(order_by=total_abund, n = 10) |>
   pull(Genus) |>
   sort()
 
 relab_genus <- ggplot(merged_df, 
                         aes(x = Sample, y = Abundance, fill = Genus)) + 
   geom_bar(position ="fill",stat = "identity") + 
-  facet_grid(cols = vars(Sample_type, status, pipeline), scales = "free_x") +
+  facet_grid(cols = vars(Sample_type, status),
+             rows = vars(pipeline),
+             scales = "free_x") +
   scale_fill_discrete(breaks = top_genera) + 
   theme(axis.text.x=element_blank(),
         axis.ticks.x=element_blank())
@@ -199,7 +196,9 @@ top_species <- merged_relab_df |>
 relab_species <- ggplot(merged_df, 
                         aes(x = Sample, y = Abundance, fill = Species)) + 
   geom_bar(position ="fill",stat = "identity") + 
-  facet_grid(cols = vars(Sample_type, status, pipeline), scales = "free_x") +
+  facet_grid(cols = vars(Sample_type, status),
+             rows = vars(pipeline), 
+             scales = "free_x") +
   scale_fill_discrete(breaks = top_species) + 
   theme(axis.text.x=element_blank(),
         axis.ticks.x=element_blank())
@@ -226,7 +225,46 @@ ggsave(file="figures/p1_legend.svg", plot=as_ggplot(relab_species_legend),
        dpi = 300)
 ```
 
+```{r}
+merged_df |> dplyr::filter(pipeline == "MetaScope", Sample_type == "Nasal") |>
+  dplyr::group_by(Species, Genus, status) |>
+  dplyr::summarise(mean = mean(Abundance)) |>
+  dplyr::arrange(desc(mean))
+merged_df |> dplyr::filter(pipeline == "DADA2", Sample_type == "Nasal") |>
+  dplyr::group_by(Species, Genus, status) |>
+  dplyr::summarise(mean = mean(Abundance)) |>
+  dplyr::arrange(desc(mean))
+merged_df |> dplyr::filter(pipeline == "QIIME2", Sample_type == "Nasal") |>
+  dplyr::group_by(Species, Genus, status) |>
+  dplyr::summarise(mean = mean(Abundance)) |>
+  dplyr::arrange(desc(mean))
 
+merged_df |> dplyr::filter(pipeline == "MetaScope", Sample_type == "Oropharynx") |>
+  dplyr::group_by(Species, Genus, status) |>
+  dplyr::summarise(mean = mean(Abundance)) |>
+  dplyr::arrange(desc(mean))
+merged_df |> dplyr::filter(pipeline == "DADA2", Sample_type == "Oropharynx") |>
+  dplyr::group_by(Species, Genus, status) |>
+  dplyr::summarise(mean = mean(Abundance)) |>
+  dplyr::arrange(desc(mean))
+merged_df |> dplyr::filter(pipeline == "QIIME2", Sample_type == "Oropharynx") |>
+  dplyr::group_by(Species, Genus, status) |>
+  dplyr::summarise(mean = mean(Abundance)) |>
+  dplyr::arrange(desc(mean))
+
+merged_df |> dplyr::filter(pipeline == "MetaScope", Sample_type == "Sputum") |>
+  dplyr::group_by(Species, status) |>
+  dplyr::summarise(mean = mean(Abundance)) |>
+  dplyr::arrange(desc(mean))
+merged_df |> dplyr::filter(pipeline == "DADA2", Sample_type == "Sputum") |>
+  dplyr::group_by(Species, Genus, status) |>
+  dplyr::summarise(mean = mean(Abundance)) |>
+  dplyr::arrange(desc(mean))
+merged_df |> dplyr::filter(pipeline == "QIIME2", Sample_type == "Sputum") |>
+  dplyr::group_by(Species, Genus, status) |>
+  dplyr::summarise(mean = mean(Abundance)) |>
+  dplyr::arrange(desc(mean))
+```
 
 ## Filtered abundance barplots
 ```{r Filtered abundance plots}
@@ -283,9 +321,9 @@ ggsave(file="figures/p6_high_abund_species", plot=high_abund_species,
 
 ## Heatmaps
 ```{r Filtered heatmaps}
-ps_ms_filt <- taxa_filter(ps_ms, frequency = 0.05)
+ps_ms_filt <- taxa_filter(ps_ms, frequency = 0.1)
   
-abundance_heatmap(ps_ms_filt, classification = 'genus',
+abundance_heatmap(ps_ms_filt, classification = 'Genus',
   treatment = "Sample_type", transformation = 'log10') + 
   facet_wrap(vars(status,Sample_type), nrow = 1, scales = "free_x")
 
@@ -297,56 +335,91 @@ abundance_heatmap(ps_dada2_filt, classification = 'Genus',
 
 ## Plotting Alpha Diversity
 ```{r Alpha Diversity}
-p2_1 <- plot_richness(ps_dada2_oral, measures=c("Observed", "Chao1", "ACE", "Shannon", "Simpson", "InvSimpson", "Fisher"), x = "status") + 
+p2_1 <- plot_richness(ps_ms_oral, measures=c("Observed", "Shannon", "Simpson", "InvSimpson"),
+                      x = "status")+ 
   stat_compare_means(label = "p.signif", label.x = 1.5, comparisons = list(c("Control", "TB")),
                      method = "wilcox.test") + 
   geom_boxplot()
 
-p2_2 <- plot_richness(ps_ms_oral, measures=c("Observed", "Chao1", "ACE", "Shannon", "Simpson", "InvSimpson", "Fisher"), x = "status")+ 
+p2_2 <- plot_richness(ps_dada2_oral, measures=c("Observed", "Shannon", "Simpson", "InvSimpson"), x = "status") + 
   stat_compare_means(label = "p.signif", label.x = 1.5, comparisons = list(c("Control", "TB")),
                      method = "wilcox.test") + 
   geom_boxplot()
 
-p2_3 <- plot_richness(ps_dada2_nasal, measures=c("Observed", "Chao1", "ACE", "Shannon", "Simpson", "InvSimpson", "Fisher"), x = "status") + 
-  stat_compare_means(label = "p.signif", label.x = 1.5, comparisons = list(c("Control", "TB")), method = "wilcox.test") + 
+
+p2_3 <- plot_richness(ps_qiime2_oral, measures=c("Observed", "Shannon", "Simpson", "InvSimpson"),
+                      x = "status")+ 
+  stat_compare_means(label = "p.signif", label.x = 1.5, comparisons = list(c("Control", "TB")),
+                     method = "wilcox.test") + 
   geom_boxplot()
 
-p2_4 <- plot_richness(ps_ms_nasal, measures=c("Observed", "Chao1", "ACE", "Shannon", "Simpson", "InvSimpson", "Fisher"), x = "status") + 
+p2_4 <- plot_richness(ps_ms_nasal, measures=c("Observed", "Shannon", "Simpson", "InvSimpson"), x = "status") + 
   stat_compare_means(label = "p.signif", label.x = 1.5, comparisons = list(c("Control", "TB")),method = "wilcox.test") + 
   geom_boxplot()
 
-ggarrange(p2_1, p2_2, p2_3, p2_4, labels = "AUTO")
+p2_5 <- plot_richness(ps_dada2_nasal, measures=c("Observed", "Shannon","Simpson", "InvSimpson"), x = "status") + 
+  stat_compare_means(label = "p.signif", label.x = 1.5, comparisons = list(c("Control", "TB")), method = "wilcox.test") + 
+  geom_boxplot()
+
+p2_6 <- plot_richness(ps_qiime2_nasal, measures=c("Observed", "Shannon", "Simpson", "InvSimpson"), x = "status") + 
+  stat_compare_means(label = "p.signif", label.x = 1.5, comparisons = list(c("Control", "TB")), method = "wilcox.test") + 
+  geom_boxplot()
+
+
+ggarrange(p2_1, p2_2, p2_3, p2_4, p2_5, p2_6, labels = "AUTO")
 ```
 
 ## PCOA Plots
 ```{r PCoA plots}
-ps_ms.ord <- ordinate(ps_ms, "PCoA", "bray")
+ps_ms.ord <- ordinate(ps_ms, "PCoA", "jsd")
 p3_1 <- plot_ordination(ps_ms, ps_ms.ord, type="samples", color="status", shape="Sample_type", title="MetaScope Analysis") + 
   geom_point(size=3) +
   stat_ellipse(aes(linetype=Sample_type)) 
-  
-set.seed(123)
-ps_dada2.ord <- ordinate(ps_dada2, "PCoA", "bray")
+
+ps_dada2.ord <- ordinate(ps_dada2, "PCoA", "jsd")
 p3_2 <- plot_ordination(ps_dada2, ps_dada2.ord, type="samples", color="status", shape="Sample_type", title="DADA2 Analysis") + 
   geom_point(size=3) + 
   stat_ellipse(aes(linetype=Sample_type))
 
-set.seed(124)
-ps_qiime2.ord <- ordinate(ps_qiime2, "PCoA", "bray")
+ps_qiime2.ord <- ordinate(ps_qiime2, "PCoA", "jsd")
 p3_3 <- plot_ordination(ps_qiime2, ps_qiime2.ord, type="samples", color="status", shape="Sample_type", title="QIIME2 Analysis") + 
   geom_point(size=3) + 
   stat_ellipse(aes(linetype=Sample_type))
-ggarrange(p3_1, p3_2, p3_3, labels = "AUTO", common.legend = TRUE, legend = "bottom")
 
+
+```
+We use the JSD distance metric because it handles zeros better than bray-curtis distance
+
+```{r}
+ps_ms_genus <- tax_glom(ps_ms, taxrank="Genus")
+ps_ms_genus.ord <- ordinate(ps_ms_genus, "PCoA", "jsd")
+p3_4 <- plot_ordination(ps_ms_genus, ps_ms_genus.ord, type="samples", color="status", shape="Sample_type", title="MetaScope Analysis") + 
+  geom_point(size=3) +
+  stat_ellipse(aes(linetype=Sample_type)) 
+
+ps_dada2_genus <- tax_glom(ps_dada2, taxrank="Genus")
+ps_dada2_genus.ord <- ordinate(ps_dada2_genus, "PCoA", "jsd")
+p3_5 <- plot_ordination(ps_dada2_genus, ps_dada2_genus.ord, type="samples", color="status", shape="Sample_type", title="DADA2 Analysis") + 
+  geom_point(size=3) + 
+  stat_ellipse(aes(linetype=Sample_type))
+
+ps_qiime2_genus <- tax_glom(ps_qiime2, taxrank="Genus")
+ps_qiime2_genus.ord <- ordinate(ps_qiime2_genus, "PCoA", "jsd")
+p3_6 <- plot_ordination(ps_qiime2_genus, ps_qiime2_genus.ord, type="samples", color="status", shape="Sample_type", title="QIIME2 Analysis") + 
+  geom_point(size=3) + 
+  stat_ellipse(aes(linetype=Sample_type))
+
+ggarrange(p3_1, p3_2, p3_3, labels = "AUTO", common.legend = TRUE, legend = "bottom")
+ggarrange(p3_1, p3_2, p3_3, p3_4, p3_5, p3_6, labels = "AUTO", common.legend = TRUE, legend = "bottom")
 ```
 
 ## Core Microbiome Analysis
 ```{r}
-ps_dada2_rel <- microbiome::transform(ps_dada2, "compositional")
 ps_ms_rel <- microbiome::transform(ps_ms, "compositional")
+ps_dada2_rel <- microbiome::transform(ps_dada2, "compositional")
+ps_qiime2_rel <- microbiome::transform(ps_qiime2, "compositional")
 
 list_core_ms <- c()
-
 groups <- list(c("TB", "Sputum"), c("TB", "Nasal"), c("TB", "Oropharynx"),
                c("Control", "Nasal"), c("Control", "Oropharynx"))
 for (i in 1:5){
@@ -360,7 +433,8 @@ names(list_core_ms) <- lapply(groups, function(x) paste(x, collapse = " "))
 p4_1 <- ggVennDiagram(list_core_ms, label_geom = "text", label = "count") + 
   scale_fill_distiller(palette = "Blues") + 
   scale_x_continuous(expand = expansion(mult = .2)) + 
-  ggtitle("MetaScope Core Microbiome")
+  ggtitle("MetaScope") + 
+  theme(plot.title = element_text(hjust = 0.5))
 
 list_core_dada <- c() # an empty object to store information
 for (i in 1:5){
@@ -374,10 +448,81 @@ names(list_core_dada) <- lapply(groups, function(x) paste(x, collapse = " "))
 p4_2 <- ggVennDiagram(list_core_dada, label_geom = "text", label = "count") + 
   scale_fill_distiller(palette = "Blues") + 
   scale_x_continuous(expand = expansion(mult = .2)) + 
-  ggtitle("DADA2 Core Microbiome")
+  ggtitle("DADA2") + 
+  theme(plot.title = element_text(hjust = 0.5))
 
-ggarrange(p4_1, p4_2, labels = "AUTO", common.legend = TRUE, legend = "right")
+list_core_qiime2<- c() # an empty object to store information
+for (i in 1:5){
+  ps.sub <- subset_samples(ps_qiime2_rel, status == groups[[i]][1] & Sample_type == groups[[i]][2])
+  core_m <- core_members(ps.sub,
+                         detection = 0.001,
+                         prevalence = 0.2)
+  list_core_qiime2[[i]] <- core_m
+}
+names(list_core_qiime2) <- lapply(groups, function(x) paste(x, collapse = " "))
+p4_3 <- ggVennDiagram(list_core_qiime2, label_geom = "text", label = "count") + 
+  scale_fill_distiller(palette = "Blues") + 
+  scale_x_continuous(expand = expansion(mult = .2)) + 
+  ggtitle("QIIME2") + 
+  theme(plot.title = element_text(hjust = 0.5))
+
+
+ggarrange(p4_1, p4_2,p4_3, labels = "AUTO", common.legend = TRUE, legend = "right")
 ```
+
+```{r}
+ps_ms_rel_genus <- microbiome::transform(ps_ms_genus, "compositional")
+ps_dada2_rel_genus <- microbiome::transform(ps_dada2_genus, "compositional")
+ps_qiime2_rel_genus <- microbiome::transform(ps_qiime2_genus, "compositional")
+
+list_core_ms <- c()
+groups <- list(c("TB", "Sputum"), c("TB", "Nasal"), c("TB", "Oropharynx"),
+               c("Control", "Nasal"), c("Control", "Oropharynx"))
+for (i in 1:5){
+  ps.sub <- subset_samples(ps_ms_rel_genus, status == groups[[i]][1] & Sample_type == groups[[i]][2])
+  core_m <- core_members(ps.sub,
+                         detection = 0.001, 
+                         prevalence = 0.2)
+  list_core_ms[[i]] <- core_m
+}
+names(list_core_ms) <- lapply(groups, function(x) paste(x, collapse = " "))
+p4_4 <- ggVennDiagram(list_core_ms, label_geom = "text", label = "count") + 
+  scale_fill_distiller(palette = "Blues") + 
+  scale_x_continuous(expand = expansion(mult = .2))
+
+list_core_dada <- c() # an empty object to store information
+for (i in 1:5){
+  ps.sub <- subset_samples(ps_dada2_rel_genus, status == groups[[i]][1] & Sample_type == groups[[i]][2])
+  core_m <- core_members(ps.sub,
+                         detection = 0.001,
+                         prevalence = 0.2)
+  list_core_dada[[i]] <- core_m
+}
+names(list_core_dada) <- lapply(groups, function(x) paste(x, collapse = " "))
+p4_5 <- ggVennDiagram(list_core_dada, label_geom = "text", label = "count") + 
+  scale_fill_distiller(palette = "Blues") + 
+  scale_x_continuous(expand = expansion(mult = .2))
+
+list_core_qiime2<- c() # an empty object to store information
+for (i in 1:5){
+  ps.sub <- subset_samples(ps_qiime2_rel_genus, status == groups[[i]][1] & Sample_type == groups[[i]][2])
+  core_m <- core_members(ps.sub,
+                         detection = 0.001,
+                         prevalence = 0.2)
+  list_core_qiime2[[i]] <- core_m
+}
+names(list_core_qiime2) <- lapply(groups, function(x) paste(x, collapse = " "))
+p4_6 <- ggVennDiagram(list_core_qiime2, label_geom = "text", label = "count") + 
+  scale_fill_distiller(palette = "Blues") + 
+  scale_x_continuous(expand = expansion(mult = .2))
+
+
+core_microbiome_figure <- ggarrange(p4_1, p4_2, p4_3, p4_4, p4_5, p4_6, 
+          labels = "AUTO", common.legend = TRUE, legend = "right")
+annotate_figure(core_microbiome_figure,
+                left = "Genus                                                                   Species")
+```
+
 
 ```{r}
 deseq_ms_oral = phyloseq_to_deseq2(ps_ms_oral, ~ status)
@@ -388,7 +533,7 @@ deseq_ms_oral_res <- cbind(deseq_ms_oral_res,
                            as(tax_table(ps_ms_oral)[rownames(deseq_ms_oral_res), ], "matrix"))
 
 EnhancedVolcano(deseq_ms_oral_res,
-  lab = deseq_ms_oral_res$species,
+  lab = deseq_ms_oral_res$Species,
   x = 'log2FoldChange',
   y = 'pvalue')
 
@@ -400,11 +545,13 @@ deseq_ms_nasal_res <- cbind(deseq_ms_nasal_res,
                            as(tax_table(ps_ms_nasal)[rownames(deseq_ms_nasal_res), ], "matrix"))
 
 EnhancedVolcano(deseq_ms_nasal_res,
-  lab = deseq_ms_nasal_res$species,
+  lab = deseq_ms_nasal_res$Species,
   x = 'log2FoldChange',
   y = 'pvalue')
 
-
+ps_dada2_species <- ps_dada2 |> tax_glom(taxrank="Species")
+ps_dada2_oral <- subset_samples(ps_dada2_species, Sample_type == "Oropharynx")
+  
 deseq_dada2_oral = phyloseq_to_deseq2(ps_dada2_oral, ~ status)
 deseq_dada2_oral = estimateSizeFactors(deseq_dada2_oral, type = 'poscounts')
 deseq_dada2_oral = DESeq(deseq_dada2_oral, test="Wald", fitType="parametric")
