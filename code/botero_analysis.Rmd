@@ -28,10 +28,10 @@ library("ggVennDiagram")
 
 ## Load in processed Data
 ```{r, eval=TRUE, include=TRUE}
-ps_dada2 <- readRDS("data_processed/botero_2014/ps_dada2.rds") |>
-  tax_glom(taxrank = "Species")
-ps_qiime2 <- readRDS("data_processed/botero_2014/ps_qiime2.rds") |>
-  tax_glom(taxrank = "Species")
+ps_dada2 <- readRDS("data_processed/botero_2014/ps_dada2.rds") 
+#tax_glom(taxrank = "Species")
+ps_qiime2 <- readRDS("data_processed/botero_2014/ps_qiime2.rds")
+#tax_glom(taxrank = "Species")
 ps_ms <- readRDS("data_processed/botero_2014/ps_metascope.rds")
 
 ps_dada2_oral <- subset_samples(ps_dada2, Sample_type == "Oropharynx")

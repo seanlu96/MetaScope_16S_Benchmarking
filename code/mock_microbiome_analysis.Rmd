@@ -25,9 +25,9 @@ library("flextable")
 ```
 
 ```{r Summarize MetaScope Results}
-priors_df <- read.csv("data_processed/kozich_2013/prior_weights/kozich_prior_weights_1.0.csv", 
+ground_truth_taxonomy <- read.csv("data_processed/kozich_2013/ground_truth_taxonomy.csv", 
                       head = TRUE)
-species_ground_truth <- priors_df$species
+species_ground_truth <- ground_truth_taxonomy$species
 
 create_summary_df <- function(csv_paths, pipeline_name) {
   summary_df <- data.frame(
@@ -43,13 +43,6 @@ create_summary_df <- function(csv_paths, pipeline_name) {
       dplyr::select(Genome, read_count) |>
       dplyr::mutate_if(is.numeric, ~ . / sum(.))
     colnames(metascope_df) <- c("Species", sample_name)
-    #metascope_df[metascope_df == "Phocaeicola vulgatus"] <- 'Bacteroides vulgatus'
-    #metascope_df[metascope_df == "Schaalia odontolytica"] <- 'Actinomyces odontolyticus'
-    #metascope_df[metascope_df == "Cutibacterium acnes"] <- 'Propionibacterium acnes'
-    #metascope_df[metascope_df == "Cereibacter sphaeroides"] <- 'Rhodobacter sphaeroides'
-    
-    
-    
     summary_df <- dplyr::left_join(summary_df, metascope_df, by = "Species")
     summary_df[is.na(summary_df)] <- 0
     
@@ -100,7 +93,7 @@ summary_df <- rbind(ms_df, ms_p_df, ms_p_b_df)
 
 # Adding Ground Truth
 ground_truth_df <- data.frame(
-  Species = c("No Call", "Incorrect Call",priors_df$species))
+  Species = c("No Call", "Incorrect Call",species_ground_truth))
 ground_truth_df <- cbind(ground_truth_df, 
                          as.data.frame(do.call(cbind, replicate(33, c(0,0,rep(1/21, 21)), simplify = FALSE))))
 colnames(ground_truth_df) <-  c("Species", as.character(unique(summary_df$name)))
@@ -113,9 +106,10 @@ ground_truth_df$pipeline <- "Ground Truth"
 summary_df <- rbind(summary_df, ground_truth_df)
 ```
 
+# Summarize DADA2 Results
 ```{r Summarize DADA2 Results}
 summary_df_dada2 <- data.frame(
-  Species = c("No Call", "Incorrect Call",priors_df$species))
+  Species = c("No Call", "Incorrect Call",species_ground_truth))
 # Left joining with aggregate because duplicate species names
 dada2_files <- list.files(path = "data_processed/kozich_2013/dada2_results",
                           full.names = TRUE)
@@ -129,10 +123,10 @@ for (i in dada2_files) {
     dplyr::select(Species, reads_count) |> 
     dplyr::mutate_if(is.numeric, ~ . / sum(.))
   colnames(dada2_df) <- c("Species", sample_name)
-  dada2_df[dada2_df == "Phocaeicola vulgatus"] <- 'Bacteroides vulgatus'
-  dada2_df[dada2_df == "Schaalia odontolytica"] <- 'Actinomyces odontolyticus'
-  dada2_df[dada2_df == "Cutibacterium acnes"] <- 'Propionibacterium acnes'
-  dada2_df[dada2_df == "Cereibacter sphaeroides"] <- 'Rhodobacter sphaeroides'
+  dada2_df[dada2_df == "Bacteroides vulgatus"] <- 'Phocaeicola vulgatus'
+  dada2_df[dada2_df == 'Actinomyces odontolyticus'] <- "Schaalia odontolytica" 
+  dada2_df[dada2_df == "Propionibacterium acnes"] <- 'Cutibacterium acnes'
+  dada2_df[dada2_df == "Rhodobacter sphaeroides"] <- 'Cereibacter sphaeroides'
   dada2_df[dada2_df == "Clostridium sensu stricto 1 beijerinckii"] <- 'Clostridium beijerinckii'
   
   
@@ -162,6 +156,50 @@ summary_df_dada2_longer <- tidyr::pivot_longer(
 summary_df_dada2_longer$pipeline <- "DADA2-NB"
 
 summary_df <- rbind(summary_df, summary_df_dada2_longer)
+```
+
+# Summarize QIIME2 Results
+```{r}
+summary_df_qiime2 <- data.frame(
+  Species = c("No Call", "Incorrect Call",species_ground_truth))
+
+qiime2_otu_table <- read.table("data_processed/kozich_2013/qiime2_results/feature_table.tsv", 
+           header = TRUE, sep = "\t") |>
+  dplyr::mutate_if(is.numeric, ~ . / sum(.)) |>
+  pivot_longer(cols = !OTU.ID)
+  
+
+qiime2_tax_table <- read.table("data_processed/kozich_2013/qiime2_results/taxonomy.tsv",
+                               header = TRUE, sep = "\t") |>
+  separate(Taxon, into = c("Superkingdom", "Phylum", "Class", 
+                           "Order", "Family", "Genus", "Species"),
+           sep = ";", fill = "right", extra = "drop") |>
+  mutate(across(Superkingdom:Species, ~ str_remove(., "^\\s*[a-z]__"))) |>
+  mutate(Species = sub("_", " ", Species))
+
+
+
+qiime2_df <- full_join(qiime2_otu_table, qiime2_tax_table, by=join_by(OTU.ID == Feature.ID))
+qiime2_df[qiime2_df == "Bacteroides vulgatus"] <- 'Phocaeicola vulgatus'
+qiime2_df[qiime2_df == "Clostridium sensu stricto 1 beijerinckii"] <- 'Clostridium beijerinckii'
+
+qiime2_df <- qiime2_df |> 
+  dplyr::mutate(category = ifelse(
+    is.na(Species), "No Call", 
+    ifelse(Species %in% species_ground_truth, Species, "Incorrect Call"))) |>
+  dplyr::group_by(category, name) |>
+  dplyr::summarise(prop = sum(value))
+qiime2_df$pipeline <- "QIIME2"
+colnames(qiime2_df) <- c("Species", "name", "prop", "pipeline")
+
+summary_df_qiime2 <- 
+  expand.grid(Species = c("No Call", "Incorrect Call", species_ground_truth), 
+            name = unique(qiime2_df$name), 
+            stringsAsFactors = TRUE) |>
+  merge(qiime2_df, by = c("Species", "name"), all.x = TRUE) |>
+  replace_na(list(prop = 0, pipeline = "QIIME2"))
+
+summary_df <- rbind(summary_df, summary_df_qiime2)
 ```
 
 # Plotting Relative Abundance of Mock Microbiome             
