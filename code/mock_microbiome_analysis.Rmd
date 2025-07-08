@@ -28,12 +28,16 @@ library("purrr")
 ground_truth_taxonomy <- read.csv("data_processed/kozich_2013/ground_truth_taxonomy.csv", 
                       head = TRUE)
 species_ground_truth <- ground_truth_taxonomy$species
-ground_truth_taxids <- ground_truth_taxonomy |> 
-  tidyr::pivot_longer(everything(), names_to = "Taxonomy Level", values_to = "taxon") |> 
-  dplyr::distinct(taxon, .keep_all = TRUE) |>
-  mutate(taxid = taxonomizr::getId(taxon, sqlFile = accessions_path)) |>
-  rowwise() |>
-  mutate(taxid = as.numeric(strsplit(taxid, split = ",")[[1]][1]))
+#ground_truth_taxids <- ground_truth_taxonomy |> 
+#  tidyr::pivot_longer(everything(), names_to = "Taxonomy Level", values_to = "taxon") |> 
+#  dplyr::distinct(taxon, .keep_all = TRUE) |>
+#  mutate(taxid = taxonomizr::getId(taxon, sqlFile = accessions_path)) |>
+#  rowwise() |>
+#  mutate(taxid = as.numeric(strsplit(taxid, split = ",")[[1]][1]))
+#write.csv(ground_truth_taxids, 
+#          file = "data_processed/kozich_2013/ground_truth_taxids.csv",
+#          row.names = FALSE)
+ground_truth_taxids <- read.csv("data_processed/kozich_2013/ground_truth_taxids.csv",)
 
 create_summary_df <- function(csv_paths, pipeline_name) {
   summary_df <- data.frame(
@@ -171,6 +175,11 @@ dada2_df <- dada2_df |>
 dada2_df$pipeline = "DADA2-NB"
 colnames(dada2_df) <- c("Species", "name", "prop", "pipeline")
 
+write.csv(dada2_df, file = "data_processed/kozich_2013/dada2_df.csv", 
+          row.names = FALSE)
+dada2_df <- read.csv("data_processed/kozich_2013/dada2_df.csv")
+
+
 summary_df <- rbind(summary_df, dada2_df)
 ```
 
@@ -238,6 +247,10 @@ summary_df_qiime2 <-
             stringsAsFactors = TRUE) |>
   merge(qiime2_df, by = c("Species", "name"), all.x = TRUE) |>
   replace_na(list(prop = 0, pipeline = "QIIME2"))
+
+write.csv(summary_df_qiime2, file = "data_processed/kozich_2013/qiime2_df.csv", 
+          row.names = FALSE)
+summary_df_qiime2 <- read.csv("data_processed/kozich_2013/qiime2_df.csv")
 
 summary_df <- rbind(summary_df, summary_df_qiime2)
 ```

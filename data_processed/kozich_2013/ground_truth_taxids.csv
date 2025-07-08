@@ -1,0 +1,90 @@
+"Taxonomy Level","taxon","taxid"
+"domain","Bacteria",2
+"kingdom","Pseudomonadati",3379134
+"phylum","Pseudomonadota",1224
+"class","Gammaproteobacteria",1236
+"order","Moraxellales",2887326
+"family","Moraxellaceae",468
+"genus","Acinetobacter",469
+"species","Acinetobacter baumannii",470
+"kingdom","Bacillati",1783272
+"phylum","Actinomycetota",201174
+"class","Actinomycetes",1760
+"order","Actinomycetales",2037
+"family","Actinomycetaceae",2049
+"genus","Schaalia",2529408
+"species","Schaalia odontolytica",1660
+"phylum","Bacillota",1239
+"class","Bacilli",91061
+"order","Bacillales",1385
+"family","Bacillaceae",186817
+"genus","Bacillus",1386
+"species","Bacillus cereus",1396
+"phylum","Bacteroidota",976
+"class","Bacteroidia",200643
+"order","Bacteroidales",171549
+"family","Bacteroidaceae",815
+"genus","Phocaeicola",909656
+"species","Phocaeicola vulgatus",821
+"class","Clostridia",186801
+"order","Eubacteriales",186802
+"family","Clostridiaceae",31979
+"genus","Clostridium",1485
+"species","Clostridium beijerinckii",1520
+"kingdom","Thermotogati",NA
+"phylum","Deinococcota",1297
+"class","Deinococci",188787
+"order","Deinococcales",118964
+"family","Deinococcaceae",183710
+"genus","Deinococcus",1298
+"species","Deinococcus radiodurans",1299
+"order","Lactobacillales",186826
+"family","Enterococcaceae",81852
+"genus","Enterococcus",1350
+"species","Enterococcus faecalis",1351
+"order","Enterobacterales",91347
+"family","Enterobacteriaceae",543
+"genus","Escherichia",561
+"species","Escherichia coli",562
+"phylum","Campylobacterota",29547
+"class","Epsilonproteobacteria",3031852
+"order","Campylobacterales",213849
+"family","Helicobacteraceae",72293
+"genus","Helicobacter",209
+"species","Helicobacter pylori",210
+"family","Lactobacillaceae",33958
+"genus","Lactobacillus",1578
+"species","Lactobacillus gasseri",1596
+"family","Listeriaceae",186820
+"genus","Listeria",1637
+"species","Listeria monocytogenes",1639
+"class","Betaproteobacteria",28216
+"order","Neisseriales",206351
+"family","Neisseriaceae",481
+"genus","Neisseria",482
+"species","Neisseria meningitidis",487
+"family","Porphyromonadaceae",171551
+"genus","Porphyromonas",836
+"species","Porphyromonas gingivalis",837
+"order","Propionibacteriales",85009
+"family","Propionibacteriaceae",31957
+"genus","Cutibacterium",1912216
+"species","Cutibacterium acnes",1747
+"order","Pseudomonadales",72274
+"family","Pseudomonadaceae",135621
+"genus","Pseudomonas",286
+"species","Pseudomonas aeruginosa",287
+"class","Alphaproteobacteria",28211
+"order","Rhodobacterales",204455
+"family","Paracoccaceae",31989
+"genus","Cereibacter",1653176
+"species","Cereibacter sphaeroides",1063
+"family","Staphylococcaceae",90964
+"genus","Staphylococcus",1279
+"species","Staphylococcus aureus",1280
+"species","Staphylococcus epidermidis",1282
+"family","Streptococcaceae",1300
+"genus","Streptococcus",1301
+"species","Streptococcus agalactiae",1311
+"species","Streptococcus mutans",1309
+"species","Streptococcus pneumoniae",1313
