@@ -13,8 +13,8 @@ process_metascope_id <- function(meta_id_path) {
   sample_name <- sub('\\..*$', '', basename(meta_id_path))
   df <- read.csv(meta_id_path)
   df <- df |>
-    dplyr::select(TaxonomyID, read_count) |>
-    dplyr::rename(!!sample_name := read_count)
+    dplyr::select(TaxonomyID, readsEM) |>
+    dplyr::rename(!!sample_name := readsEM)
   return(df)
 }
 
