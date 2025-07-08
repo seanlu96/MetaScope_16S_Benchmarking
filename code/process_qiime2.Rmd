@@ -13,9 +13,13 @@ knitr::opts_chunk$set(cache=FALSE, cache.path=".cache/")
 ```{r Loading in Libraries}
 library("tidyverse")
 library("phyloseq")
+library("taxonomizr")
 ```
 
-```{r}
+```{r Processing Kozich QIIME2 Data}
+taxonomy_cols <- c("Species", "Genus", "Family", "Order", "Class", "Phylum", "Superkingdom")
+accessions_path <- "/projectsp/f_wj183_1/reflib/2024_accession_taxa/accessionTaxa.sql"
+
 qiime2_otu_table <- read.table("data_processed/kozich_2013/qiime2_results/feature_table.tsv", 
            header = TRUE, sep = "\t")
 
@@ -23,11 +27,39 @@ qiime2_tax_table <- read.table("data_processed/kozich_2013/qiime2_results/taxono
                                header = TRUE, sep = "\t") |>
   separate(Taxon, into = c("Superkingdom", "Phylum", "Class", 
                            "Order", "Family", "Genus", "Species"),
-           sep = ";", fill = "right", extra = "drop")
+           sep = ";", fill = "right", extra = "drop") |>
+  mutate(across(Superkingdom:Species, ~ str_remove(., "^\\s*[a-z]__"))) |>
+  mutate(Species = sub("_", " ", Species)) |>
+  rowwise() |>
+  mutate(
+    taxon = {
+      tax_vals <- c_across(all_of(taxonomy_cols))
+      non_na_vals <- tax_vals[!is.na(tax_vals)]
+      if (length(non_na_vals) > 0) non_na_vals[1] else NA_character_0}) |>
+  ungroup()
+
+# Manually Address NAs
+qiime2_tax_table$taxon[qiime2_tax_table$taxon == "Clostridium_sensu_stricto_1"] <- "Clostridium"
+qiime2_tax_table$taxon[qiime2_tax_table$taxon == "Escherichia-Shigella"] <- "Escherichia" # Escherichia and Shigella are different genera. Giving qiime2 the benefit of the doubt and saying its assigning to the correct genus Escherichia
+qiime2_tax_table$taxon[qiime2_tax_table$taxon == "Bacteroides vulgatus"] <- "Phocaeicola vulgatus"
+qiime2_tax_table$taxon[qiime2_tax_table$taxon == "Bacteroides massiliensis"] <- "Phocaeicola massiliensis"
+qiime2_tax_table$taxon[qiime2_tax_table$taxon == "Alistipes obesi"] <- "Alistipes communis"
+qiime2_tax_table$taxon[qiime2_tax_table$taxon == "Candidatus_Udaeobacter"] <- "Candidatus Udaeobacter"
+qiime2_tax_table$taxon[qiime2_tax_table$taxon == "Ruminococcaceae"] <- "Oscillospiraceae"
+
+
+qiime2_tax_table <- qiime2_tax_table |> 
+  mutate(taxid_raw = taxonomizr::getId(taxon, sqlFile = accessions_path)) |>
+  rowwise() |>
+  mutate(taxid = as.numeric(strsplit(taxid_raw, split = ",")[[1]][1])) |>
+  ungroup() |>
+  mutate(taxid = if_else(is.na(taxid), 9999999, taxid)) |> # REPLACING ALL UNKNOWN TAXONS WITH TAXID 9999999
+  dplyr::select(!taxid_raw)
+
 ```
 
 
-```{r}
+```{r Processing Botero QIIME2 Data}
 qiime2_otu_table <- read.table("data_processed/botero_2014/qiime2_results/feature_table.tsv", 
            header = TRUE, sep = "\t")
 
