@@ -119,64 +119,64 @@ summary_df <- rbind(summary_df, ground_truth_df)
 # Summarize DADA2 Results
 ```{r Summarize DADA2 Results}
 # Left joining with aggregate because duplicate species names
-dada2_files <- list.files(path = "data_processed/kozich_2013/dada2_results",
-                          full.names = TRUE)
-taxonomy_cols <- c("Species", "Genus", "Family", "Order", "Class", "Phylum", "Kingdom")
-
-# Join DADA2 Files together
-dada2_df <- purrr::map_dfr(dada2_files, function(x){
-  sample_name <- sub("\\..*$", "", basename(x)) |> strsplit(split = "dada2_")
-  sample_name <- sample_name[[1]][2]
-  res <- read.csv(x) |>
-    dplyr::mutate(Species = ifelse(is.na(Species), NA, paste0(Genus, " ", Species))) |>
-    dplyr::mutate_if(is.numeric, ~ . / sum(.)) |>
-    dplyr::mutate(pipeline = "DADA2-NB", name = sample_name) |>
-    dplyr::rowwise() |>
-    dplyr::mutate(
-      taxon = {
-        tax_vals <- c_across(all_of(taxonomy_cols))
-        non_na_vals <- tax_vals[!is.na(tax_vals)]
-        if (length(non_na_vals) > 0) non_na_vals[1] else NA_character_
-      }
-    ) |>
-    dplyr::ungroup()
-})
-
-# Clean up old taxonomy names 
-dada2_df$taxon[dada2_df$taxon == "Bacteroides vulgatus"] <- 'Phocaeicola vulgatus'
-dada2_df$taxon[dada2_df$taxon == 'Actinomyces odontolyticus'] <- "Schaalia odontolytica" 
-dada2_df$taxon[dada2_df$taxon == "Propionibacterium acnes"] <- 'Cutibacterium acnes'
-dada2_df$taxon[dada2_df$taxon == "Rhodobacter sphaeroides"] <- 'Cereibacter sphaeroides'
-dada2_df$taxon[dada2_df$taxon == "Clostridium sensu stricto 1 beijerinckii"] <- 'Clostridium beijerinckii'
-dada2_df$taxon[dada2_df$taxon == "Escherichia-Shigella"] <- 'Escherichia' # Assuming DADA2 meant Escherichia, both are separate genera
-dada2_df$taxon[dada2_df$taxon == "Prevotella_9"] <- 'Segatella'
-dada2_df$taxon[dada2_df$taxon == "Prevotella_9 copri"] <- 'Segatella corpi'
-dada2_df$taxon[dada2_df$taxon == "Rhodobacteraceae"] <- 'Paracoccaceae'
-dada2_df$taxon[dada2_df$taxon == "Bacteroides massiliensis"] <- 'Phocaeicola massiliensis'
-dada2_df$taxon[dada2_df$taxon == "Ruminococcaceae"] <- 'Oscillospiraceae'
-
-# Add NCBI taxonomy ids
-dada2_df <- dada2_df |>
-  mutate(taxid_raw = taxonomizr::getId(taxon, sqlFile = accessions_path)) |>
-  rowwise() |>
-  mutate(taxid = as.numeric(strsplit(taxid_raw, split = ",")[[1]][1])) |>
-  ungroup() |>
-  mutate(taxid = if_else(is.na(taxid), 9999999, taxid)) |> # REPLACING ALL UNKNOWN TAXONS WITH TAXID 9999999
-  dplyr::select(!taxid_raw)
-
-# Adding categories
-dada2_df <- dada2_df |> 
-  dplyr::mutate(category = case_when(
-    (taxid %in% ground_truth_taxids$taxid) & !is.na(Species) ~ taxon,
-    (taxid %in% ground_truth_taxids$taxid) & is.na(Species) ~ "No Call",
-    !(taxid %in% ground_truth_taxids$taxid) ~ "Incorrect Call")) |>
-  dplyr::group_by(category, name) |>
-  dplyr::summarise(prop = sum(reads_count))
-dada2_df$pipeline = "DADA2-NB"
-colnames(dada2_df) <- c("Species", "name", "prop", "pipeline")
-
-write.csv(dada2_df, file = "data_processed/kozich_2013/dada2_df.csv", 
-          row.names = FALSE)
+# dada2_files <- list.files(path = "data_processed/kozich_2013/dada2_results",
+#                           full.names = TRUE)
+# taxonomy_cols <- c("Species", "Genus", "Family", "Order", "Class", "Phylum", "Kingdom")
+# 
+# # Join DADA2 Files together
+# dada2_df <- purrr::map_dfr(dada2_files, function(x){
+#   sample_name <- sub("\\..*$", "", basename(x)) |> strsplit(split = "dada2_")
+#   sample_name <- sample_name[[1]][2]
+#   res <- read.csv(x) |>
+#     dplyr::mutate(Species = ifelse(is.na(Species), NA, paste0(Genus, " ", Species))) |>
+#     dplyr::mutate_if(is.numeric, ~ . / sum(.)) |>
+#     dplyr::mutate(pipeline = "DADA2-NB", name = sample_name) |>
+#     dplyr::rowwise() |>
+#     dplyr::mutate(
+#       taxon = {
+#         tax_vals <- c_across(all_of(taxonomy_cols))
+#         non_na_vals <- tax_vals[!is.na(tax_vals)]
+#         if (length(non_na_vals) > 0) non_na_vals[1] else NA_character_
+#       }
+#     ) |>
+#     dplyr::ungroup()
+# })
+# 
+# # Clean up old taxonomy names 
+# dada2_df$taxon[dada2_df$taxon == "Bacteroides vulgatus"] <- 'Phocaeicola vulgatus'
+# dada2_df$taxon[dada2_df$taxon == 'Actinomyces odontolyticus'] <- "Schaalia odontolytica" 
+# dada2_df$taxon[dada2_df$taxon == "Propionibacterium acnes"] <- 'Cutibacterium acnes'
+# dada2_df$taxon[dada2_df$taxon == "Rhodobacter sphaeroides"] <- 'Cereibacter sphaeroides'
+# dada2_df$taxon[dada2_df$taxon == "Clostridium sensu stricto 1 beijerinckii"] <- 'Clostridium beijerinckii'
+# dada2_df$taxon[dada2_df$taxon == "Escherichia-Shigella"] <- 'Escherichia' # Assuming DADA2 meant Escherichia, both are separate genera
+# dada2_df$taxon[dada2_df$taxon == "Prevotella_9"] <- 'Segatella'
+# dada2_df$taxon[dada2_df$taxon == "Prevotella_9 copri"] <- 'Segatella corpi'
+# dada2_df$taxon[dada2_df$taxon == "Rhodobacteraceae"] <- 'Paracoccaceae'
+# dada2_df$taxon[dada2_df$taxon == "Bacteroides massiliensis"] <- 'Phocaeicola massiliensis'
+# dada2_df$taxon[dada2_df$taxon == "Ruminococcaceae"] <- 'Oscillospiraceae'
+# 
+### Add NCBI taxonomy ids
+# dada2_df <- dada2_df |>
+#   mutate(taxid_raw = taxonomizr::getId(taxon, sqlFile = accessions_path)) |>
+#   rowwise() |>
+#   mutate(taxid = as.numeric(strsplit(taxid_raw, split = ",")[[1]][1])) |>
+#   ungroup() |>
+#   mutate(taxid = if_else(is.na(taxid), 9999999, taxid)) |> # REPLACING ALL UNKNOWN TAXONS WITH TAXID 9999999
+#   dplyr::select(!taxid_raw)
+# 
+### Adding categories
+# dada2_df <- dada2_df |> 
+#   dplyr::mutate(category = case_when(
+#     (taxid %in% ground_truth_taxids$taxid) & !is.na(Species) ~ taxon,
+#     (taxid %in% ground_truth_taxids$taxid) & is.na(Species) ~ "No Call",
+#     !(taxid %in% ground_truth_taxids$taxid) ~ "Incorrect Call")) |>
+#   dplyr::group_by(category, name) |>
+#   dplyr::summarise(prop = sum(reads_count))
+# dada2_df$pipeline = "DADA2-NB"
+# colnames(dada2_df) <- c("Species", "name", "prop", "pipeline")
+# 
+# #write.csv(dada2_df, file = "data_processed/kozich_2013/dada2_df.csv", 
+#          row.names = FALSE)
 dada2_df <- read.csv("data_processed/kozich_2013/dada2_df.csv")
 
 
@@ -185,71 +185,71 @@ summary_df <- rbind(summary_df, dada2_df)
 
 # Summarize QIIME2 Results
 ```{r Summarize QIIME2 Results} 
-summary_df_qiime2 <- data.frame(
-  Species = c("No Call", "Incorrect Call",species_ground_truth))
-
-qiime2_otu_table <- read.table("data_processed/kozich_2013/qiime2_results/feature_table.tsv", 
-           header = TRUE, sep = "\t") |>
-  dplyr::mutate_if(is.numeric, ~ . / sum(.)) |>
-  pivot_longer(cols = !OTU.ID)
-  
-taxonomy_cols <- c("Species", "Genus", "Family", "Order", "Class", "Phylum", "Superkingdom")
-qiime2_tax_table <- read.table("data_processed/kozich_2013/qiime2_results/taxonomy.tsv",
-                               header = TRUE, sep = "\t") |>
-  separate(Taxon, into = c("Superkingdom", "Phylum", "Class", 
-                           "Order", "Family", "Genus", "Species"),
-           sep = ";", fill = "right", extra = "drop") |>
-  mutate(across(Superkingdom:Species, ~ str_remove(., "^\\s*[a-z]__"))) |>
-  mutate(Species = sub("_", " ", Species)) |>
-  rowwise() |>
-  mutate(
-    taxon = {
-      tax_vals <- c_across(all_of(taxonomy_cols))
-      non_na_vals <- tax_vals[!is.na(tax_vals)]
-      if (length(non_na_vals) > 0) non_na_vals[1] else NA_character_0}) |>
-  ungroup()
-
-# Manually Address NAs
-qiime2_tax_table$taxon[qiime2_tax_table$taxon == "Clostridium_sensu_stricto_1"] <- "Clostridium"
-qiime2_tax_table$taxon[qiime2_tax_table$taxon == "Escherichia-Shigella"] <- "Escherichia" # Escherichia and Shigella are different genera. Giving qiime2 the benefit of the doubt and saying its assigning to the correct genus Escherichia
-qiime2_tax_table$taxon[qiime2_tax_table$taxon == "Bacteroides vulgatus"] <- "Phocaeicola vulgatus"
-qiime2_tax_table$taxon[qiime2_tax_table$taxon == "Bacteroides massiliensis"] <- "Phocaeicola massiliensis"
-qiime2_tax_table$taxon[qiime2_tax_table$taxon == "Alistipes obesi"] <- "Alistipes communis"
-qiime2_tax_table$taxon[qiime2_tax_table$taxon == "Candidatus_Udaeobacter"] <- "Candidatus Udaeobacter"
-qiime2_tax_table$taxon[qiime2_tax_table$taxon == "Ruminococcaceae"] <- "Oscillospiraceae"
-
-# Add taxids to QIIME2 taxonomy table
-qiime2_tax_table <- qiime2_tax_table |> 
-  mutate(taxid_raw = taxonomizr::getId(taxon, sqlFile = accessions_path)) |>
-  rowwise() |>
-  mutate(taxid = as.numeric(strsplit(taxid_raw, split = ",")[[1]][1])) |>
-  ungroup() |>
-  mutate(taxid = if_else(is.na(taxid), 9999999, taxid)) |> # REPLACING ALL UNKNOWN TAXONS WITH TAXID 9999999
-  dplyr::select(!taxid_raw)
-
-
-qiime2_df <- full_join(qiime2_otu_table, qiime2_tax_table, by=join_by(OTU.ID == Feature.ID))
-
-
-qiime2_df <- qiime2_df |> 
-  dplyr::mutate(category = case_when(
-    (taxid %in% ground_truth_taxids$taxid) & !is.na(Species) ~ taxon,
-    (taxid %in% ground_truth_taxids$taxid) & is.na(Species) ~ "No Call",
-    !(taxid %in% ground_truth_taxids$taxid) ~ "Incorrect Call")) |>
-  dplyr::group_by(category, name) |>
-  dplyr::summarise(prop = sum(value))
-qiime2_df$pipeline <- "QIIME2"
-colnames(qiime2_df) <- c("Species", "name", "prop", "pipeline")
-
-summary_df_qiime2 <- 
-  expand.grid(Species = c("No Call", "Incorrect Call", species_ground_truth), 
-            name = unique(qiime2_df$name), 
-            stringsAsFactors = TRUE) |>
-  merge(qiime2_df, by = c("Species", "name"), all.x = TRUE) |>
-  replace_na(list(prop = 0, pipeline = "QIIME2"))
-
-write.csv(summary_df_qiime2, file = "data_processed/kozich_2013/qiime2_df.csv", 
-          row.names = FALSE)
+# summary_df_qiime2 <- data.frame(
+#   Species = c("No Call", "Incorrect Call",species_ground_truth))
+# 
+# qiime2_otu_table <- read.table("data_processed/kozich_2013/qiime2_results/feature_table.tsv", 
+#            header = TRUE, sep = "\t") |>
+#   dplyr::mutate_if(is.numeric, ~ . / sum(.)) |>
+#   pivot_longer(cols = !OTU.ID)
+#   
+# taxonomy_cols <- c("Species", "Genus", "Family", "Order", "Class", "Phylum", "Superkingdom")
+# qiime2_tax_table <- read.table("data_processed/kozich_2013/qiime2_results/taxonomy.tsv",
+#                                header = TRUE, sep = "\t") |>
+#   separate(Taxon, into = c("Superkingdom", "Phylum", "Class", 
+#                            "Order", "Family", "Genus", "Species"),
+#            sep = ";", fill = "right", extra = "drop") |>
+#   mutate(across(Superkingdom:Species, ~ str_remove(., "^\\s*[a-z]__"))) |>
+#   mutate(Species = sub("_", " ", Species)) |>
+#   rowwise() |>
+#   mutate(
+#     taxon = {
+#       tax_vals <- c_across(all_of(taxonomy_cols))
+#       non_na_vals <- tax_vals[!is.na(tax_vals)]
+#       if (length(non_na_vals) > 0) non_na_vals[1] else NA_character_0}) |>
+#   ungroup()
+# 
+# # Manually Address NAs
+# qiime2_tax_table$taxon[qiime2_tax_table$taxon == "Clostridium_sensu_stricto_1"] <- "Clostridium"
+# qiime2_tax_table$taxon[qiime2_tax_table$taxon == "Escherichia-Shigella"] <- "Escherichia" # Escherichia and Shigella are different genera. Giving qiime2 the benefit of the doubt and saying its assigning to the correct genus Escherichia
+# qiime2_tax_table$taxon[qiime2_tax_table$taxon == "Bacteroides vulgatus"] <- "Phocaeicola vulgatus"
+# qiime2_tax_table$taxon[qiime2_tax_table$taxon == "Bacteroides massiliensis"] <- "Phocaeicola massiliensis"
+# qiime2_tax_table$taxon[qiime2_tax_table$taxon == "Alistipes obesi"] <- "Alistipes communis"
+# qiime2_tax_table$taxon[qiime2_tax_table$taxon == "Candidatus_Udaeobacter"] <- "Candidatus Udaeobacter"
+# qiime2_tax_table$taxon[qiime2_tax_table$taxon == "Ruminococcaceae"] <- "Oscillospiraceae"
+# 
+# # Add taxids to QIIME2 taxonomy table
+# qiime2_tax_table <- qiime2_tax_table |> 
+#   mutate(taxid_raw = taxonomizr::getId(taxon, sqlFile = accessions_path)) |>
+#   rowwise() |>
+#   mutate(taxid = as.numeric(strsplit(taxid_raw, split = ",")[[1]][1])) |>
+#   ungroup() |>
+#   mutate(taxid = if_else(is.na(taxid), 9999999, taxid)) |> # REPLACING ALL UNKNOWN TAXONS WITH TAXID 9999999
+#   dplyr::select(!taxid_raw)
+# 
+# 
+# qiime2_df <- full_join(qiime2_otu_table, qiime2_tax_table, by=join_by(OTU.ID == Feature.ID))
+# 
+# 
+# qiime2_df <- qiime2_df |> 
+#   dplyr::mutate(category = case_when(
+#     (taxid %in% ground_truth_taxids$taxid) & !is.na(Species) ~ taxon,
+#     (taxid %in% ground_truth_taxids$taxid) & is.na(Species) ~ "No Call",
+#     !(taxid %in% ground_truth_taxids$taxid) ~ "Incorrect Call")) |>
+#   dplyr::group_by(category, name) |>
+#   dplyr::summarise(prop = sum(value))
+# qiime2_df$pipeline <- "QIIME2"
+# colnames(qiime2_df) <- c("Species", "name", "prop", "pipeline")
+# 
+# summary_df_qiime2 <- 
+#   expand.grid(Species = c("No Call", "Incorrect Call", species_ground_truth), 
+#             name = unique(qiime2_df$name), 
+#             stringsAsFactors = TRUE) |>
+#   merge(qiime2_df, by = c("Species", "name"), all.x = TRUE) |>
+#   replace_na(list(prop = 0, pipeline = "QIIME2"))
+# 
+# write.csv(summary_df_qiime2, file = "data_processed/kozich_2013/qiime2_df.csv", 
+#           row.names = FALSE)
 summary_df_qiime2 <- read.csv("data_processed/kozich_2013/qiime2_df.csv")
 
 summary_df <- rbind(summary_df, summary_df_qiime2)
