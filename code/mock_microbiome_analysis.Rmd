@@ -17,21 +17,27 @@ library("ggplot2")
 library("dplyr")        
 library("tibble")
 library("ggpubr")
-library("phylosmith")
 library("DESeq2")
 library("ggsci")
 library("colorspace")
 library("flextable")
+library("purrr")
 ```
 
 ```{r Summarize MetaScope Results}
 ground_truth_taxonomy <- read.csv("data_processed/kozich_2013/ground_truth_taxonomy.csv", 
                       head = TRUE)
 species_ground_truth <- ground_truth_taxonomy$species
+ground_truth_taxids <- ground_truth_taxonomy |> 
+  tidyr::pivot_longer(everything(), names_to = "Taxonomy Level", values_to = "taxon") |> 
+  dplyr::distinct(taxon, .keep_all = TRUE) |>
+  mutate(taxid = taxonomizr::getId(taxon, sqlFile = accessions_path)) |>
+  rowwise() |>
+  mutate(taxid = as.numeric(strsplit(taxid, split = ",")[[1]][1]))
 
 create_summary_df <- function(csv_paths, pipeline_name) {
   summary_df <- data.frame(
-    Species = c("No Call", "Incorrect Call",priors_df$species))
+    Species = c("No Call", "Incorrect Call",species_ground_truth))
   n = 1
   for (i in csv_paths) {
     # Get Sample Names
@@ -51,7 +57,7 @@ create_summary_df <- function(csv_paths, pipeline_name) {
       dplyr::select(sample_name) |>
       sum()
     correct_call.metascope <- metascope_df |>
-      dplyr::filter(Species %in% priors_df$species) |>
+      dplyr::filter(Species %in% species_ground_truth) |>
       dplyr::select(sample_name) |>
       sum()
     incorrect_call.metascope <- 1 - correct_call.metascope - no_call.metascope
@@ -68,7 +74,7 @@ create_summary_df <- function(csv_paths, pipeline_name) {
     values_to = "prop"
   )
   summary_df_long$Species <- factor(summary_df_long$Species, 
-                                    levels = c("No Call", "Incorrect Call", priors_df$species))
+                                    levels = c("No Call", "Incorrect Call", species_ground_truth))
   summary_df_long$name <- factor(summary_df_long$name)
   summary_df_long$pipeline <- factor(rep(pipeline_name, nrow(summary_df_long)))
   return(summary_df_long)
@@ -108,58 +114,68 @@ summary_df <- rbind(summary_df, ground_truth_df)
 
 # Summarize DADA2 Results
 ```{r Summarize DADA2 Results}
-summary_df_dada2 <- data.frame(
-  Species = c("No Call", "Incorrect Call",species_ground_truth))
 # Left joining with aggregate because duplicate species names
 dada2_files <- list.files(path = "data_processed/kozich_2013/dada2_results",
                           full.names = TRUE)
-for (i in dada2_files) {
-  # Get Sample Names
-  sample_name <- sub("\\..*$", "", basename(i)) |> strsplit(split = "dada2_")
+taxonomy_cols <- c("Species", "Genus", "Family", "Order", "Class", "Phylum", "Kingdom")
+
+# Join DADA2 Files together
+dada2_df <- purrr::map_dfr(dada2_files, function(x){
+  sample_name <- sub("\\..*$", "", basename(x)) |> strsplit(split = "dada2_")
   sample_name <- sample_name[[1]][2]
-  # Clean MetaBlast Table
-  dada2_df <- read.csv(i)
-  dada2_df <- dplyr::mutate(dada2_df, Species = ifelse(is.na(Species), NA, paste0(Genus, " ", Species))) |>
-    dplyr::select(Species, reads_count) |> 
-    dplyr::mutate_if(is.numeric, ~ . / sum(.))
-  colnames(dada2_df) <- c("Species", sample_name)
-  dada2_df[dada2_df == "Bacteroides vulgatus"] <- 'Phocaeicola vulgatus'
-  dada2_df[dada2_df == 'Actinomyces odontolyticus'] <- "Schaalia odontolytica" 
-  dada2_df[dada2_df == "Propionibacterium acnes"] <- 'Cutibacterium acnes'
-  dada2_df[dada2_df == "Rhodobacter sphaeroides"] <- 'Cereibacter sphaeroides'
-  dada2_df[dada2_df == "Clostridium sensu stricto 1 beijerinckii"] <- 'Clostridium beijerinckii'
-  
-  
-  summary_df_dada2 <- dplyr::left_join(summary_df_dada2, dada2_df, by = "Species")
-  summary_df_dada2[is.na(summary_df_dada2)] <- 0
-  
-  no_call.metascope <- dada2_df |>
-    dplyr::filter(is.na(Species)) |>
-    dplyr::select(sample_name) |>
-    sum()
-  correct_call.metascope <- dada2_df |>
-    dplyr::filter(Species %in% species_ground_truth) |>
-    dplyr::select(sample_name) |>
-    sum()
-  incorrect_call.metascope <- 1 - correct_call.metascope - no_call.metascope
-  
-  summary_df_dada2[1,sample_name] <- no_call.metascope
-  summary_df_dada2[2,sample_name] <- incorrect_call.metascope
-} 
+  res <- read.csv(x) |>
+    dplyr::mutate(Species = ifelse(is.na(Species), NA, paste0(Genus, " ", Species))) |>
+    dplyr::mutate_if(is.numeric, ~ . / sum(.)) |>
+    dplyr::mutate(pipeline = "DADA2-NB", name = sample_name) |>
+    dplyr::rowwise() |>
+    dplyr::mutate(
+      taxon = {
+        tax_vals <- c_across(all_of(taxonomy_cols))
+        non_na_vals <- tax_vals[!is.na(tax_vals)]
+        if (length(non_na_vals) > 0) non_na_vals[1] else NA_character_
+      }
+    ) |>
+    dplyr::ungroup()
+})
 
-summary_df_dada2_longer <- tidyr::pivot_longer(
-  summary_df_dada2, 
-  cols = c(2:34), 
-  values_to = "prop"
-)
+# Clean up old taxonomy names 
+dada2_df$taxon[dada2_df$taxon == "Bacteroides vulgatus"] <- 'Phocaeicola vulgatus'
+dada2_df$taxon[dada2_df$taxon == 'Actinomyces odontolyticus'] <- "Schaalia odontolytica" 
+dada2_df$taxon[dada2_df$taxon == "Propionibacterium acnes"] <- 'Cutibacterium acnes'
+dada2_df$taxon[dada2_df$taxon == "Rhodobacter sphaeroides"] <- 'Cereibacter sphaeroides'
+dada2_df$taxon[dada2_df$taxon == "Clostridium sensu stricto 1 beijerinckii"] <- 'Clostridium beijerinckii'
+dada2_df$taxon[dada2_df$taxon == "Escherichia-Shigella"] <- 'Escherichia' # Assuming DADA2 meant Escherichia, both are separate genera
+dada2_df$taxon[dada2_df$taxon == "Prevotella_9"] <- 'Segatella'
+dada2_df$taxon[dada2_df$taxon == "Prevotella_9 copri"] <- 'Segatella corpi'
+dada2_df$taxon[dada2_df$taxon == "Rhodobacteraceae"] <- 'Paracoccaceae'
+dada2_df$taxon[dada2_df$taxon == "Bacteroides massiliensis"] <- 'Phocaeicola massiliensis'
+dada2_df$taxon[dada2_df$taxon == "Ruminococcaceae"] <- 'Oscillospiraceae'
 
-summary_df_dada2_longer$pipeline <- "DADA2-NB"
+# Add NCBI taxonomy ids
+dada2_df <- dada2_df |>
+  mutate(taxid_raw = taxonomizr::getId(taxon, sqlFile = accessions_path)) |>
+  rowwise() |>
+  mutate(taxid = as.numeric(strsplit(taxid_raw, split = ",")[[1]][1])) |>
+  ungroup() |>
+  mutate(taxid = if_else(is.na(taxid), 9999999, taxid)) |> # REPLACING ALL UNKNOWN TAXONS WITH TAXID 9999999
+  dplyr::select(!taxid_raw)
 
-summary_df <- rbind(summary_df, summary_df_dada2_longer)
+# Adding categories
+dada2_df <- dada2_df |> 
+  dplyr::mutate(category = case_when(
+    (taxid %in% ground_truth_taxids$taxid) & !is.na(Species) ~ taxon,
+    (taxid %in% ground_truth_taxids$taxid) & is.na(Species) ~ "No Call",
+    !(taxid %in% ground_truth_taxids$taxid) ~ "Incorrect Call")) |>
+  dplyr::group_by(category, name) |>
+  dplyr::summarise(prop = sum(reads_count))
+dada2_df$pipeline = "DADA2-NB"
+colnames(dada2_df) <- c("Species", "name", "prop", "pipeline")
+
+summary_df <- rbind(summary_df, dada2_df)
 ```
 
 # Summarize QIIME2 Results
-```{r}
+```{r Summarize QIIME2 Results} 
 summary_df_qiime2 <- data.frame(
   Species = c("No Call", "Incorrect Call",species_ground_truth))
 
@@ -168,25 +184,49 @@ qiime2_otu_table <- read.table("data_processed/kozich_2013/qiime2_results/featur
   dplyr::mutate_if(is.numeric, ~ . / sum(.)) |>
   pivot_longer(cols = !OTU.ID)
   
-
+taxonomy_cols <- c("Species", "Genus", "Family", "Order", "Class", "Phylum", "Superkingdom")
 qiime2_tax_table <- read.table("data_processed/kozich_2013/qiime2_results/taxonomy.tsv",
                                header = TRUE, sep = "\t") |>
   separate(Taxon, into = c("Superkingdom", "Phylum", "Class", 
                            "Order", "Family", "Genus", "Species"),
            sep = ";", fill = "right", extra = "drop") |>
   mutate(across(Superkingdom:Species, ~ str_remove(., "^\\s*[a-z]__"))) |>
-  mutate(Species = sub("_", " ", Species))
+  mutate(Species = sub("_", " ", Species)) |>
+  rowwise() |>
+  mutate(
+    taxon = {
+      tax_vals <- c_across(all_of(taxonomy_cols))
+      non_na_vals <- tax_vals[!is.na(tax_vals)]
+      if (length(non_na_vals) > 0) non_na_vals[1] else NA_character_0}) |>
+  ungroup()
 
+# Manually Address NAs
+qiime2_tax_table$taxon[qiime2_tax_table$taxon == "Clostridium_sensu_stricto_1"] <- "Clostridium"
+qiime2_tax_table$taxon[qiime2_tax_table$taxon == "Escherichia-Shigella"] <- "Escherichia" # Escherichia and Shigella are different genera. Giving qiime2 the benefit of the doubt and saying its assigning to the correct genus Escherichia
+qiime2_tax_table$taxon[qiime2_tax_table$taxon == "Bacteroides vulgatus"] <- "Phocaeicola vulgatus"
+qiime2_tax_table$taxon[qiime2_tax_table$taxon == "Bacteroides massiliensis"] <- "Phocaeicola massiliensis"
+qiime2_tax_table$taxon[qiime2_tax_table$taxon == "Alistipes obesi"] <- "Alistipes communis"
+qiime2_tax_table$taxon[qiime2_tax_table$taxon == "Candidatus_Udaeobacter"] <- "Candidatus Udaeobacter"
+qiime2_tax_table$taxon[qiime2_tax_table$taxon == "Ruminococcaceae"] <- "Oscillospiraceae"
+
+# Add taxids to QIIME2 taxonomy table
+qiime2_tax_table <- qiime2_tax_table |> 
+  mutate(taxid_raw = taxonomizr::getId(taxon, sqlFile = accessions_path)) |>
+  rowwise() |>
+  mutate(taxid = as.numeric(strsplit(taxid_raw, split = ",")[[1]][1])) |>
+  ungroup() |>
+  mutate(taxid = if_else(is.na(taxid), 9999999, taxid)) |> # REPLACING ALL UNKNOWN TAXONS WITH TAXID 9999999
+  dplyr::select(!taxid_raw)
 
 
 qiime2_df <- full_join(qiime2_otu_table, qiime2_tax_table, by=join_by(OTU.ID == Feature.ID))
-qiime2_df[qiime2_df == "Bacteroides vulgatus"] <- 'Phocaeicola vulgatus'
-qiime2_df[qiime2_df == "Clostridium sensu stricto 1 beijerinckii"] <- 'Clostridium beijerinckii'
+
 
 qiime2_df <- qiime2_df |> 
-  dplyr::mutate(category = ifelse(
-    is.na(Species), "No Call", 
-    ifelse(Species %in% species_ground_truth, Species, "Incorrect Call"))) |>
+  dplyr::mutate(category = case_when(
+    (taxid %in% ground_truth_taxids$taxid) & !is.na(Species) ~ taxon,
+    (taxid %in% ground_truth_taxids$taxid) & is.na(Species) ~ "No Call",
+    !(taxid %in% ground_truth_taxids$taxid) ~ "Incorrect Call")) |>
   dplyr::group_by(category, name) |>
   dplyr::summarise(prop = sum(value))
 qiime2_df$pipeline <- "QIIME2"
@@ -210,7 +250,8 @@ summary_df$Species <- factor(summary_df$Species,
                                               "Incorrect Call", 
                                               species_ground_truth))
 summary_df$pipeline <- factor(summary_df$pipeline,
-                                    levels = c("Ground Truth", 
+                                    levels = c("Ground Truth",
+                                               "QIIME2",
                                                "DADA2-NB", 
                                                "MetaScope", 
                                                "MetaScope Priors", 
@@ -237,185 +278,80 @@ plot(p1)
 ```
 
 ```{r Accuracy Tables, echo=FALSE}
-dada2_correct_call <- summary_df |> 
-  dplyr::filter(!(Species %in% c("Incorrect Call", "No Call"))) |>
-  dplyr::filter(pipeline == "DADA2-NB") |>
-  dplyr::group_by(name) |>
-  dplyr::summarise(total_prop = sum(prop)) |>
-  dplyr::pull(total_prop) |>
-  mean() |>
-  round(digits =3)
-dada2_correct_call_sd <- summary_df |> 
-  dplyr::filter(!(Species %in% c("Incorrect Call", "No Call"))) |>
-  dplyr::filter(pipeline == "DADA2-NB") |>
-  dplyr::group_by(name) |>
-  dplyr::summarise(total_prop = sum(prop)) |>
-  dplyr::pull(total_prop) |>
-  sd(na.rm = TRUE)|>
-  round(digits = 3)
-dada2_no_call <- summary_df |>
-  dplyr::filter(Species == "No Call") |>
-  dplyr::filter(pipeline == "DADA2-NB") |>
-  dplyr::pull(prop) |>
-  mean()|>
-  round(digits = 3)
-dada2_no_call_sd <- summary_df |>
-  dplyr::filter(Species == "No Call") |>
-  dplyr::filter(pipeline == "DADA2-NB") |>
-  dplyr::pull(prop) |>
-  sd(na.rm = TRUE)|>
-  round(digits = 3)
-dada2_incorrect_call <- summary_df |>
-  dplyr::filter(Species == "Incorrect Call") |>
-  dplyr::filter(pipeline == "DADA2-NB") |>
-  dplyr::pull(prop) |>
-  mean()|>
-  round(digits = 3)
-dada2_incorrect_call_sd <- summary_df |>
-  dplyr::filter(Species == "Incorrect Call") |>
-  dplyr::filter(pipeline == "DADA2-NB") |>
-  dplyr::pull(prop) |>
-  sd(na.rm = TRUE)|>
-  round(digits = 3)
+calculate_accuracy_metrics <- function(profiler) {
+  correct_call <- summary_df |> 
+    dplyr::filter(!(Species %in% c("Incorrect Call", "No Call"))) |>
+    dplyr::filter(pipeline == profiler) |>
+    dplyr::group_by(name) |>
+    dplyr::summarise(total_prop = sum(prop)) |>
+    dplyr::pull(total_prop) |>
+    mean() |>
+    round(digits =3)
+  correct_call_sd <- summary_df |> 
+    dplyr::filter(!(Species %in% c("Incorrect Call", "No Call"))) |>
+    dplyr::filter(pipeline == profiler) |>
+    dplyr::group_by(name) |>
+    dplyr::summarise(total_prop = sum(prop)) |>
+    dplyr::pull(total_prop) |>
+    sd(na.rm = TRUE)|>
+    round(digits = 3)
+  no_call <- summary_df |>
+    dplyr::filter(Species == "No Call") |>
+    dplyr::filter(pipeline == profiler) |>
+    dplyr::pull(prop) |>
+    mean()|>
+    round(digits = 3)
+  no_call_sd <- summary_df |>
+    dplyr::filter(Species == "No Call") |>
+    dplyr::filter(pipeline == profiler) |>
+    dplyr::pull(prop) |>
+    sd(na.rm = TRUE)|>
+    round(digits = 3)
+  incorrect_call <- summary_df |>
+    dplyr::filter(Species == "Incorrect Call") |>
+    dplyr::filter(pipeline == profiler) |>
+    dplyr::pull(prop) |>
+    mean()|>
+    round(digits = 3)
+  incorrect_call_sd <- summary_df |>
+    dplyr::filter(Species == "Incorrect Call") |>
+    dplyr::filter(pipeline == profiler) |>
+    dplyr::pull(prop) |>
+    sd(na.rm = TRUE)|>
+    round(digits = 3)
+  all_res <- c(correct_call, correct_call_sd, no_call, no_call_sd, 
+               incorrect_call,incorrect_call_sd)
+  names(all_res) <- c("correct_call", "correct_call_sd", "no_call", 
+                      "no_call_sd", "incorrect_call","incorrect_call_sd")
+  return(all_res)
+}
 
-metascope_correct_call <- summary_df |> 
-  dplyr::filter(!(Species %in% c("Incorrect Call", "No Call"))) |>
-  dplyr::filter(pipeline == "MetaScope") |>
-  dplyr::group_by(name) |>
-  dplyr::summarise(total_prop = sum(prop)) |>
-  dplyr::pull(total_prop) |>
-  mean()|>
-  round(digits = 3)
-metascope_correct_call_sd <- summary_df |> 
-  dplyr::filter(!(Species %in% c("Incorrect Call", "No Call"))) |>
-  dplyr::filter(pipeline == "MetaScope") |>
-  dplyr::group_by(name) |>
-  dplyr::summarise(total_prop = sum(prop)) |>
-  dplyr::pull(total_prop) |>
-  sd(na.rm = TRUE)|>
-  round(digits = 3)
-metascope_no_call <- summary_df |>
-  dplyr::filter(Species == "No Call") |>
-  dplyr::filter(pipeline == "MetaScope") |>
-  dplyr::pull(prop) |>
-  mean()|>
-  round(digits = 3)
-metascope_no_call_sd <- summary_df |>
-  dplyr::filter(Species == "No Call") |>
-  dplyr::filter(pipeline == "MetaScope") |>
-  dplyr::pull(prop) |>
-  sd(na.rm = TRUE)|>
-  round(digits = 3)
-metascope_incorrect_call <- summary_df |>
-  dplyr::filter(Species == "Incorrect Call") |>
-  dplyr::filter(pipeline == "MetaScope") |>
-  dplyr::pull(prop) |>
-  mean()|>
-  round(digits = 3)
-metascope_incorrect_call_sd <- summary_df |>
-  dplyr::filter(Species == "Incorrect Call") |>
-  dplyr::filter(pipeline == "MetaScope") |>
-  dplyr::pull(prop) |>
-  sd(na.rm = TRUE)|>
-  round(digits = 3)
-
-metascope_priors_correct_call <- summary_df |> 
-  dplyr::filter(!(Species %in% c("Incorrect Call", "No Call"))) |>
-  dplyr::filter(pipeline == "MetaScope Priors") |>
-  dplyr::group_by(name) |>
-  dplyr::summarise(total_prop = sum(prop)) |>
-  dplyr::pull(total_prop) |>
-  mean()|>
-  round(digits = 3)
-metascope_priors_correct_call_sd <- summary_df |> 
-  dplyr::filter(!(Species %in% c("Incorrect Call", "No Call"))) |>
-  dplyr::filter(pipeline == "MetaScope Priors") |>
-  dplyr::group_by(name) |>
-  dplyr::summarise(total_prop = sum(prop)) |>
-  dplyr::pull(total_prop) |>
-  sd(na.rm = TRUE)|>
-  round(digits = 3)
-metascope_priors_no_call <- summary_df |>
-  dplyr::filter(Species == "No Call") |>
-  dplyr::filter(pipeline == "MetaScope Priors") |>
-  dplyr::pull(prop) |>
-  mean()|>
-  round(digits = 3)
-metascope_priors_no_call_sd <- summary_df |>
-  dplyr::filter(Species == "No Call") |>
-  dplyr::filter(pipeline == "MetaScope Priors") |>
-  dplyr::pull(prop) |>
-  sd(na.rm = TRUE)|>
-  round(digits = 3)
-metascope_priors_incorrect_call <- summary_df |>
-  dplyr::filter(Species == "Incorrect Call") |>
-  dplyr::filter(pipeline == "MetaScope Priors") |>
-  dplyr::pull(prop) |>
-  mean()|>
-  round(digits = 3)
-metascope_priors_incorrect_call_sd <- summary_df |>
-  dplyr::filter(Species == "Incorrect Call") |>
-  dplyr::filter(pipeline == "MetaScope Priors") |>
-  dplyr::pull(prop) |>
-  sd(na.rm = TRUE)|>
-  round(digits = 3)
-
-
-metablast_correct_call <- summary_df |> 
-  dplyr::filter(!(Species %in% c("Incorrect Call", "No Call"))) |>
-  dplyr::filter(pipeline == "MetaBlast") |>
-  dplyr::group_by(name) |>
-  dplyr::summarise(total_prop = sum(prop)) |>
-  dplyr::pull(total_prop) |>
-  mean()|>
-  round(digits = 3)
-metablast_correct_call_sd <- summary_df |> 
-  dplyr::filter(!(Species %in% c("Incorrect Call", "No Call"))) |>
-  dplyr::filter(pipeline == "MetaBlast") |>
-  dplyr::group_by(name) |>
-  dplyr::summarise(total_prop = sum(prop)) |>
-  dplyr::pull(total_prop) |>
-  sd(na.rm = TRUE)|>
-  round(digits = 3)
-metablast_no_call <- summary_df |>
-  dplyr::filter(Species == "No Call") |>
-  dplyr::filter(pipeline == "MetaBlast") |>
-  dplyr::pull(prop) |>
-  mean()|>
-  round(digits = 3)
-metablast_no_call_sd <- summary_df |>
-  dplyr::filter(Species == "No Call") |>
-  dplyr::filter(pipeline == "MetaBlast") |>
-  dplyr::pull(prop) |>
-  sd(na.rm = TRUE)|>
-  round(digits = 3)
-metablast_incorrect_call <- summary_df |>
-  dplyr::filter(Species == "Incorrect Call") |>
-  dplyr::filter(pipeline == "MetaBlast") |>
-  dplyr::pull(prop) |>
-  mean()|>
-  round(digits = 3)
-metablast_incorrect_call_sd <- summary_df |>
-  dplyr::filter(Species == "Incorrect Call") |>
-  dplyr::filter(pipeline == "MetaBlast") |>
-  dplyr::pull(prop) |>
-  sd(na.rm = TRUE)|>
-  round(digits = 3)
+qiime2_metrics <- calculate_accuracy_metrics("QIIME2")
+dada2_metrics <- calculate_accuracy_metrics("DADA2-NB")
+metascope_metrics <- calculate_accuracy_metrics("MetaScope")
+metascope_priors_metrics <- calculate_accuracy_metrics("MetaScope Priors")
+metascope_blast_metrics <- calculate_accuracy_metrics("MetaBlast")
 
 table_summary <- tidyr::tibble(
-  "Profiler" = c("DADA2-NB", "MetaScope", "MetaScope Priors", "MetaBlast"),
-  "Correct Call" = c(paste0(dada2_correct_call, " ± ", dada2_correct_call_sd),
-                     paste0(metascope_correct_call, " ± ", metascope_correct_call_sd),
-                     paste0(metascope_priors_correct_call, " ± ", metascope_priors_correct_call_sd),
-                     paste0(metablast_correct_call, " ± ", metablast_correct_call_sd)),
-  "No Call" = c(paste0(dada2_no_call, " ± ", dada2_no_call_sd),
-                paste0(metascope_no_call, " ± ", metascope_no_call_sd),
-                paste0(metascope_priors_no_call, " ± ", metascope_priors_no_call_sd),
-                paste0(metablast_no_call, " ± ", metablast_no_call_sd)),
-  "Incorrect Call" = c(paste0(dada2_incorrect_call, " ± ", dada2_incorrect_call_sd),
-                     paste0(metascope_incorrect_call, " ± ", metascope_incorrect_call_sd),
-                     paste0(metascope_priors_incorrect_call, " ± ", metascope_priors_incorrect_call_sd),
-                     paste0(metablast_incorrect_call, " ± ", metablast_incorrect_call_sd))
+  "Profiler" = c("QIIME2", "DADA2-NB", "MetaScope", "MetaScope Priors", "MetaBlast"),
+  "Correct Call" = c(
+    paste0(qiime2_metrics[1], " ± ", qiime2_metrics[2]),
+    paste0(dada2_metrics[1], " ± ", dada2_metrics[2]),
+    paste0(metascope_metrics[1], " ± ", metascope_metrics[2]),
+    paste0(metascope_priors_metrics[1], " ± ", metascope_priors_metrics[2]),
+    paste0(metascope_blast_metrics[1], " ± ", metascope_blast_metrics[2])),
+  "No Call" = c(
+    paste0(qiime2_metrics[3], " ± ", qiime2_metrics[4]),
+    paste0(dada2_metrics[3], " ± ", dada2_metrics[4]),
+    paste0(metascope_metrics[3], " ± ", metascope_metrics[4]),
+    paste0(metascope_priors_metrics[3], " ± ", metascope_priors_metrics[4]),
+    paste0(metascope_blast_metrics[3], " ± ", metascope_blast_metrics[4])),
+  "Incorrect Call" = c(
+    paste0(qiime2_metrics[5], " ± ", qiime2_metrics[6]),
+    paste0(dada2_metrics[5], " ± ", dada2_metrics[6]),
+    paste0(metascope_metrics[5], " ± ", metascope_metrics[6]),
+    paste0(metascope_priors_metrics[5], " ± ", metascope_priors_metrics[6]),
+    paste0(metascope_blast_metrics[5], " ± ", metascope_blast_metrics[6])),
 )
 
 table <- flextable(data = table_summary) |>
