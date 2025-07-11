@@ -24,10 +24,15 @@ library("flextable")
 library("purrr")
 ```
 
+## Summarize MetaScope Results
 ```{r Summarize MetaScope Results}
+
 ground_truth_taxonomy <- read.csv("data_processed/kozich_2013/ground_truth_taxonomy.csv", 
                       head = TRUE)
 species_ground_truth <- ground_truth_taxonomy$species
+accessions_path <- "reflib/accessionTaxa.sql"
+
+## Code used to generate ground truth taxids
 #ground_truth_taxids <- ground_truth_taxonomy |> 
 #  tidyr::pivot_longer(everything(), names_to = "Taxonomy Level", values_to = "taxon") |> 
 #  dplyr::distinct(taxon, .keep_all = TRUE) |>
@@ -39,6 +44,7 @@ species_ground_truth <- ground_truth_taxonomy$species
 #          row.names = FALSE)
 ground_truth_taxids <- read.csv("data_processed/kozich_2013/ground_truth_taxids.csv",)
 
+# Function used to read MetaScope outputs and generate cleaned accuracy metrics
 create_summary_df <- function(csv_paths, pipeline_name) {
   summary_df <- data.frame(
     Species = c("No Call", "Incorrect Call",species_ground_truth))
@@ -84,6 +90,7 @@ create_summary_df <- function(csv_paths, pipeline_name) {
   return(summary_df_long)
 }
 
+## Generate Summary dataframes for all metascope outputs
 ms_df <- create_summary_df(list.files(path = "data_processed/kozich_2013/results", 
                              pattern = ".metascope_id.csv", 
                              full.names = TRUE, 
@@ -101,7 +108,7 @@ ms_p_b_df <-create_summary_df(list.files(path = "data_processed/kozich_2013/resu
                   pipeline = "MetaBlast")
 summary_df <- rbind(ms_df, ms_p_df, ms_p_b_df)
 
-# Adding Ground Truth
+## Add Ground Truth to summary dataframe
 ground_truth_df <- data.frame(
   Species = c("No Call", "Incorrect Call",species_ground_truth))
 ground_truth_df <- cbind(ground_truth_df, 
@@ -118,140 +125,136 @@ summary_df <- rbind(summary_df, ground_truth_df)
 
 # Summarize DADA2 Results
 ```{r Summarize DADA2 Results}
-# Left joining with aggregate because duplicate species names
-# dada2_files <- list.files(path = "data_processed/kozich_2013/dada2_results",
-#                           full.names = TRUE)
-# taxonomy_cols <- c("Species", "Genus", "Family", "Order", "Class", "Phylum", "Kingdom")
-# 
-# # Join DADA2 Files together
-# dada2_df <- purrr::map_dfr(dada2_files, function(x){
-#   sample_name <- sub("\\..*$", "", basename(x)) |> strsplit(split = "dada2_")
-#   sample_name <- sample_name[[1]][2]
-#   res <- read.csv(x) |>
-#     dplyr::mutate(Species = ifelse(is.na(Species), NA, paste0(Genus, " ", Species))) |>
-#     dplyr::mutate_if(is.numeric, ~ . / sum(.)) |>
-#     dplyr::mutate(pipeline = "DADA2-NB", name = sample_name) |>
-#     dplyr::rowwise() |>
-#     dplyr::mutate(
-#       taxon = {
-#         tax_vals <- c_across(all_of(taxonomy_cols))
-#         non_na_vals <- tax_vals[!is.na(tax_vals)]
-#         if (length(non_na_vals) > 0) non_na_vals[1] else NA_character_
-#       }
-#     ) |>
-#     dplyr::ungroup()
-# })
-# 
-# # Clean up old taxonomy names 
-# dada2_df$taxon[dada2_df$taxon == "Bacteroides vulgatus"] <- 'Phocaeicola vulgatus'
-# dada2_df$taxon[dada2_df$taxon == 'Actinomyces odontolyticus'] <- "Schaalia odontolytica" 
-# dada2_df$taxon[dada2_df$taxon == "Propionibacterium acnes"] <- 'Cutibacterium acnes'
-# dada2_df$taxon[dada2_df$taxon == "Rhodobacter sphaeroides"] <- 'Cereibacter sphaeroides'
-# dada2_df$taxon[dada2_df$taxon == "Clostridium sensu stricto 1 beijerinckii"] <- 'Clostridium beijerinckii'
-# dada2_df$taxon[dada2_df$taxon == "Escherichia-Shigella"] <- 'Escherichia' # Assuming DADA2 meant Escherichia, both are separate genera
-# dada2_df$taxon[dada2_df$taxon == "Prevotella_9"] <- 'Segatella'
-# dada2_df$taxon[dada2_df$taxon == "Prevotella_9 copri"] <- 'Segatella corpi'
-# dada2_df$taxon[dada2_df$taxon == "Rhodobacteraceae"] <- 'Paracoccaceae'
-# dada2_df$taxon[dada2_df$taxon == "Bacteroides massiliensis"] <- 'Phocaeicola massiliensis'
-# dada2_df$taxon[dada2_df$taxon == "Ruminococcaceae"] <- 'Oscillospiraceae'
-# 
-### Add NCBI taxonomy ids
-# dada2_df <- dada2_df |>
-#   mutate(taxid_raw = taxonomizr::getId(taxon, sqlFile = accessions_path)) |>
-#   rowwise() |>
-#   mutate(taxid = as.numeric(strsplit(taxid_raw, split = ",")[[1]][1])) |>
-#   ungroup() |>
-#   mutate(taxid = if_else(is.na(taxid), 9999999, taxid)) |> # REPLACING ALL UNKNOWN TAXONS WITH TAXID 9999999
-#   dplyr::select(!taxid_raw)
-# 
-### Adding categories
-# dada2_df <- dada2_df |> 
-#   dplyr::mutate(category = case_when(
-#     (taxid %in% ground_truth_taxids$taxid) & !is.na(Species) ~ taxon,
-#     (taxid %in% ground_truth_taxids$taxid) & is.na(Species) ~ "No Call",
-#     !(taxid %in% ground_truth_taxids$taxid) ~ "Incorrect Call")) |>
-#   dplyr::group_by(category, name) |>
-#   dplyr::summarise(prop = sum(reads_count))
-# dada2_df$pipeline = "DADA2-NB"
-# colnames(dada2_df) <- c("Species", "name", "prop", "pipeline")
-# 
-# #write.csv(dada2_df, file = "data_processed/kozich_2013/dada2_df.csv", 
-#          row.names = FALSE)
-dada2_df <- read.csv("data_processed/kozich_2013/dada2_df.csv")
+##Left joining with aggregate because duplicate species names
+dada2_files <- list.files(path = "data_processed/kozich_2013/dada2_results",
+                          full.names = TRUE)
+taxonomy_cols <- c("Species", "Genus", "Family", "Order", "Class", "Phylum", "Kingdom")
 
+## Join DADA2 Files together
+dada2_df <- purrr::map_dfr(dada2_files, function(x){
+  sample_name <- sub("\\..*$", "", basename(x)) |> strsplit(split = "dada2_")
+  sample_name <- sample_name[[1]][2]
+  res <- read.csv(x) |>
+    dplyr::mutate(Species = ifelse(is.na(Species), NA, paste0(Genus, " ", Species))) |>
+    dplyr::mutate_if(is.numeric, ~ . / sum(.)) |>
+    dplyr::mutate(pipeline = "DADA2-NB", name = sample_name) |>
+    dplyr::rowwise() |>
+    dplyr::mutate(
+      taxon = {
+        tax_vals <- c_across(all_of(taxonomy_cols))
+        non_na_vals <- tax_vals[!is.na(tax_vals)]
+        if (length(non_na_vals) > 0) non_na_vals[1] else NA_character_
+      }
+    ) |>
+    dplyr::ungroup()
+})
+
+## Clean up old taxonomy names
+dada2_df$taxon[dada2_df$taxon == "Bacteroides vulgatus"] <- 'Phocaeicola vulgatus'
+dada2_df$taxon[dada2_df$taxon == 'Actinomyces odontolyticus'] <- "Schaalia odontolytica"
+dada2_df$taxon[dada2_df$taxon == "Propionibacterium acnes"] <- 'Cutibacterium acnes'
+dada2_df$taxon[dada2_df$taxon == "Rhodobacter sphaeroides"] <- 'Cereibacter sphaeroides'
+dada2_df$taxon[dada2_df$taxon == "Clostridium sensu stricto 1 beijerinckii"] <- 'Clostridium beijerinckii'
+dada2_df$taxon[dada2_df$taxon == "Escherichia-Shigella"] <- 'Escherichia' # Assuming DADA2 meant Escherichia, both are separate genera
+dada2_df$taxon[dada2_df$taxon == "Prevotella_9"] <- 'Segatella'
+dada2_df$taxon[dada2_df$taxon == "Prevotella_9 copri"] <- 'Segatella corpi'
+dada2_df$taxon[dada2_df$taxon == "Rhodobacteraceae"] <- 'Paracoccaceae'
+dada2_df$taxon[dada2_df$taxon == "Bacteroides massiliensis"] <- 'Phocaeicola massiliensis'
+dada2_df$taxon[dada2_df$taxon == "Ruminococcaceae"] <- 'Oscillospiraceae'
+
+## Add NCBI taxonomy ids
+dada2_df <- dada2_df |>
+  mutate(taxid_raw = taxonomizr::getId(taxon, sqlFile = accessions_path)) |>
+  rowwise() |>
+  mutate(taxid = as.numeric(strsplit(taxid_raw, split = ",")[[1]][1])) |>
+  ungroup() |>
+  mutate(taxid = if_else(is.na(taxid), 9999999, taxid)) |> # REPLACING ALL UNKNOWN TAXONS WITH TAXID 9999999
+  dplyr::select(!taxid_raw)
+
+## Adding categories
+dada2_df_cats <- dada2_df |>
+  dplyr::mutate(category = case_when(
+    (taxid %in% ground_truth_taxids$taxid) & !is.na(Species) ~ taxon,
+    (taxid %in% ground_truth_taxids$taxid) & is.na(Species) ~ "No Call",
+    !(taxid %in% ground_truth_taxids$taxid) ~ "Incorrect Call")) |>
+  dplyr::group_by(category, name) |>
+  dplyr::summarise(prop = sum(reads_count))
+dada2_df_cats$pipeline = "DADA2-NB"
+colnames(dada2_df_cats) <- c("Species", "name", "prop", "pipeline")
+
+#write.csv(dada2_df_cats, file = "data_processed/kozich_2013/dada2_df.csv",
+#         row.names = FALSE)
 
 summary_df <- rbind(summary_df, dada2_df)
 ```
 
 # Summarize QIIME2 Results
 ```{r Summarize QIIME2 Results} 
-# summary_df_qiime2 <- data.frame(
-#   Species = c("No Call", "Incorrect Call",species_ground_truth))
-# 
-# qiime2_otu_table <- read.table("data_processed/kozich_2013/qiime2_results/feature_table.tsv", 
-#            header = TRUE, sep = "\t") |>
-#   dplyr::mutate_if(is.numeric, ~ . / sum(.)) |>
-#   pivot_longer(cols = !OTU.ID)
-#   
-# taxonomy_cols <- c("Species", "Genus", "Family", "Order", "Class", "Phylum", "Superkingdom")
-# qiime2_tax_table <- read.table("data_processed/kozich_2013/qiime2_results/taxonomy.tsv",
-#                                header = TRUE, sep = "\t") |>
-#   separate(Taxon, into = c("Superkingdom", "Phylum", "Class", 
-#                            "Order", "Family", "Genus", "Species"),
-#            sep = ";", fill = "right", extra = "drop") |>
-#   mutate(across(Superkingdom:Species, ~ str_remove(., "^\\s*[a-z]__"))) |>
-#   mutate(Species = sub("_", " ", Species)) |>
-#   rowwise() |>
-#   mutate(
-#     taxon = {
-#       tax_vals <- c_across(all_of(taxonomy_cols))
-#       non_na_vals <- tax_vals[!is.na(tax_vals)]
-#       if (length(non_na_vals) > 0) non_na_vals[1] else NA_character_0}) |>
-#   ungroup()
-# 
-# # Manually Address NAs
-# qiime2_tax_table$taxon[qiime2_tax_table$taxon == "Clostridium_sensu_stricto_1"] <- "Clostridium"
-# qiime2_tax_table$taxon[qiime2_tax_table$taxon == "Escherichia-Shigella"] <- "Escherichia" # Escherichia and Shigella are different genera. Giving qiime2 the benefit of the doubt and saying its assigning to the correct genus Escherichia
-# qiime2_tax_table$taxon[qiime2_tax_table$taxon == "Bacteroides vulgatus"] <- "Phocaeicola vulgatus"
-# qiime2_tax_table$taxon[qiime2_tax_table$taxon == "Bacteroides massiliensis"] <- "Phocaeicola massiliensis"
-# qiime2_tax_table$taxon[qiime2_tax_table$taxon == "Alistipes obesi"] <- "Alistipes communis"
-# qiime2_tax_table$taxon[qiime2_tax_table$taxon == "Candidatus_Udaeobacter"] <- "Candidatus Udaeobacter"
-# qiime2_tax_table$taxon[qiime2_tax_table$taxon == "Ruminococcaceae"] <- "Oscillospiraceae"
-# 
-# # Add taxids to QIIME2 taxonomy table
-# qiime2_tax_table <- qiime2_tax_table |> 
-#   mutate(taxid_raw = taxonomizr::getId(taxon, sqlFile = accessions_path)) |>
-#   rowwise() |>
-#   mutate(taxid = as.numeric(strsplit(taxid_raw, split = ",")[[1]][1])) |>
-#   ungroup() |>
-#   mutate(taxid = if_else(is.na(taxid), 9999999, taxid)) |> # REPLACING ALL UNKNOWN TAXONS WITH TAXID 9999999
-#   dplyr::select(!taxid_raw)
-# 
-# 
-# qiime2_df <- full_join(qiime2_otu_table, qiime2_tax_table, by=join_by(OTU.ID == Feature.ID))
-# 
-# 
-# qiime2_df <- qiime2_df |> 
-#   dplyr::mutate(category = case_when(
-#     (taxid %in% ground_truth_taxids$taxid) & !is.na(Species) ~ taxon,
-#     (taxid %in% ground_truth_taxids$taxid) & is.na(Species) ~ "No Call",
-#     !(taxid %in% ground_truth_taxids$taxid) ~ "Incorrect Call")) |>
-#   dplyr::group_by(category, name) |>
-#   dplyr::summarise(prop = sum(value))
-# qiime2_df$pipeline <- "QIIME2"
-# colnames(qiime2_df) <- c("Species", "name", "prop", "pipeline")
-# 
-# summary_df_qiime2 <- 
-#   expand.grid(Species = c("No Call", "Incorrect Call", species_ground_truth), 
-#             name = unique(qiime2_df$name), 
-#             stringsAsFactors = TRUE) |>
-#   merge(qiime2_df, by = c("Species", "name"), all.x = TRUE) |>
-#   replace_na(list(prop = 0, pipeline = "QIIME2"))
-# 
-# write.csv(summary_df_qiime2, file = "data_processed/kozich_2013/qiime2_df.csv", 
-#           row.names = FALSE)
-summary_df_qiime2 <- read.csv("data_processed/kozich_2013/qiime2_df.csv")
+summary_df_qiime2 <- data.frame(
+  Species = c("No Call", "Incorrect Call",species_ground_truth))
 
+qiime2_otu_table <- read.table("data_processed/kozich_2013/qiime2_results/feature_table.tsv",
+           header = TRUE, sep = "\t") |>
+  dplyr::mutate_if(is.numeric, ~ . / sum(.)) |>
+  pivot_longer(cols = !OTU.ID)
+
+taxonomy_cols <- c("Species", "Genus", "Family", "Order", "Class", "Phylum", "Superkingdom")
+qiime2_tax_table <- read.table("data_processed/kozich_2013/qiime2_results/taxonomy.tsv",
+                               header = TRUE, sep = "\t") |>
+  separate(Taxon, into = c("Superkingdom", "Phylum", "Class",
+                           "Order", "Family", "Genus", "Species"),
+           sep = ";", fill = "right", extra = "drop") |>
+  mutate(across(Superkingdom:Species, ~ str_remove(., "^\\s*[a-z]__"))) |>
+  mutate(Species = sub("_", " ", Species)) |>
+  rowwise() |>
+  mutate(
+    taxon = {
+      tax_vals <- c_across(all_of(taxonomy_cols))
+      non_na_vals <- tax_vals[!is.na(tax_vals)]
+      if (length(non_na_vals) > 0) non_na_vals[1] else NA_character_0}) |>
+  ungroup()
+
+# Manually Address NAs
+qiime2_tax_table$taxon[qiime2_tax_table$taxon == "Clostridium_sensu_stricto_1"] <- "Clostridium"
+qiime2_tax_table$taxon[qiime2_tax_table$taxon == "Escherichia-Shigella"] <- "Escherichia" # Escherichia and Shigella are different genera. Giving qiime2 the benefit of the doubt and saying its assigning to the correct genus Escherichia
+qiime2_tax_table$taxon[qiime2_tax_table$taxon == "Bacteroides vulgatus"] <- "Phocaeicola vulgatus"
+qiime2_tax_table$taxon[qiime2_tax_table$taxon == "Bacteroides massiliensis"] <- "Phocaeicola massiliensis"
+qiime2_tax_table$taxon[qiime2_tax_table$taxon == "Alistipes obesi"] <- "Alistipes communis"
+qiime2_tax_table$taxon[qiime2_tax_table$taxon == "Candidatus_Udaeobacter"] <- "Candidatus Udaeobacter"
+qiime2_tax_table$taxon[qiime2_tax_table$taxon == "Ruminococcaceae"] <- "Oscillospiraceae"
+
+# Add taxids to QIIME2 taxonomy table
+qiime2_tax_table <- qiime2_tax_table |>
+  mutate(taxid_raw = taxonomizr::getId(taxon, sqlFile = accessions_path)) |>
+  rowwise() |>
+  mutate(taxid = as.numeric(strsplit(taxid_raw, split = ",")[[1]][1])) |>
+  ungroup() |>
+  mutate(taxid = if_else(is.na(taxid), 9999999, taxid)) |> # REPLACING ALL UNKNOWN TAXONS WITH TAXID 9999999
+  dplyr::select(!taxid_raw)
+
+
+qiime2_df <- full_join(qiime2_otu_table, qiime2_tax_table, by=join_by(OTU.ID == Feature.ID))
+
+
+qiime2_df_cats <- qiime2_df |>
+  dplyr::mutate(category = case_when(
+    (taxid %in% ground_truth_taxids$taxid) & !is.na(Species) ~ taxon,
+    (taxid %in% ground_truth_taxids$taxid) & is.na(Species) ~ "No Call",
+    !(taxid %in% ground_truth_taxids$taxid) ~ "Incorrect Call")) |>
+  dplyr::group_by(category, name) |>
+  dplyr::summarise(prop = sum(value))
+qiime2_df_cats$pipeline <- "QIIME2"
+colnames(qiime2_df_cats) <- c("Species", "name", "prop", "pipeline")
+
+summary_df_qiime2 <-
+  expand.grid(Species = c("No Call", "Incorrect Call", species_ground_truth),
+            name = unique(qiime2_df_cats$name),
+            stringsAsFactors = TRUE) |>
+  merge(qiime2_df_cats, by = c("Species", "name"), all.x = TRUE) |>
+  replace_na(list(prop = 0, pipeline = "QIIME2"))
+
+#write.csv(summary_df_qiime2, file = "data_processed/kozich_2013/qiime2_df.csv",
+#          row.names = FALSE)
 summary_df <- rbind(summary_df, summary_df_qiime2)
 ```
 
@@ -545,4 +548,221 @@ ggplot(hmp_test, aes(x=pipeline, y=Correct.Call)) +
   scale_x_discrete(labels=c("1.0" = "Priors 1.0")) +
   scale_y_continuous(breaks=c(0,0.5,1), 
                      limits = c(0,1.2))
+```
+
+```{r}
+accessions_path <- "reflib/accessionTaxa.sql"
+
+metascope_generate_ps_object <- function(file_paths, pipeline) {
+  dfs_list <- file_paths |>   
+    set_names(function(x) sub("\\..*$", "", basename(x))) |>
+    map(function(x) {
+      df <- read.csv(x)
+      sample_name <- sub("\\..*$", "", basename(x))
+      df <- df |> 
+        select(TaxonomyID,Genome,readsEM) |>
+        dplyr::rename(!!paste0(sample_name,".",pipeline) := readsEM)
+      return(df)
+    })
+  dfs_merged <- reduce(dfs_list, full_join, by = c("TaxonomyID", "Genome")) |>
+    mutate(across(where(is.numeric), ~ replace_na(.x, 0))) |>
+    dplyr::select(-Genome)
+  otu_mat <- dfs_merged |>
+    tibble::column_to_rownames("TaxonomyID") |>
+    as.matrix()
+  tax_mat <- dfs_merged$TaxonomyID |> taxonomizr::getTaxonomy(sqlFile = accessions_path) |>
+    as.matrix()
+  return(list(otu_mat, tax_mat))
+}
+ms_mats <- metascope_generate_ps_object(
+  list.files(path = "data_processed/kozich_2013/results", 
+             pattern = ".metascope_id.csv", 
+             full.names = TRUE, 
+             recursive = TRUE),
+             pipeline = "MetaScope")
+
+ground_truth_tax_mat <- ground_truth_taxonomy |>
+  mutate(taxid = taxonomizr::getId(species, accessions_path)) |>
+  tibble::column_to_rownames("taxid")
+
+ground_truth_otu_mat <- matrix(1/21, nrow = 21, ncol = 33, 
+                               dimnames = list(rownames(ground_truth_tax_mat), 
+                                               lapply(unique(ground_truth_df$name), paste0, ".", "ground_truth"))) |>
+  as.data.frame() |>
+  tibble::rownames_to_column("taxid")
+
+merged_otu_mat <- ms_mats[[1]] |>
+  as.data.frame() |> 
+  mutate(across(everything(), ~ .x / sum(.x))) |>
+  tibble::rownames_to_column("taxid") |> 
+  full_join(ground_truth_otu_mat, by = "taxid") |>
+  tibble::column_to_rownames("taxid") |>
+  mutate(across(everything(), ~ replace_na(.x, 0))) |>
+  as.matrix()
+
+merged_tax_mat <- ms_mats[[2]] |> 
+  as.data.frame() |> 
+  bind_rows(ground_truth_tax_mat) |>
+  dplyr::select(-kingdom) |>
+  distinct(.keep_all = TRUE) |>
+  as.matrix()
+
+merged_samples_df <- matrix(c(rep(unique(ground_truth_df$name), times = 2),
+                               rep(c("MetaScope", "Ground_Truth"), each = 33)),
+                             nrow = ncol(merged_otu_mat), ncol = 2, 
+                             dimnames = list(colnames(merged_otu_mat),
+                                             c("sample_name", "pipeline"))) |>
+  as.data.frame()
+
+merged_ps <- phyloseq::phyloseq(otu_table(merged_otu_mat, taxa_are_rows = TRUE),
+                   tax_table(merged_tax_mat),
+                   sample_data(merged_samples_df))
+
+merged_ps.ord <- ordinate(merged_ps, "PCoA", "jsd")
+plot_ordination(merged_ps, merged_ps.ord, type="samples", color="sample_name", shape= "pipeline", 
+                  title="OTUs")
+```
+
+# Using Vegan to determine distance matrices
+```{r}
+ground_truth_taxonomy_taxids <- 
+  taxonomizr::getId(ground_truth_taxonomy$species,
+                             accessions_path)
+
+# Helper function to generate distance metrics from metascope files
+dist_ms_to_ground_truth <- function(file_paths, pipeline, distance_metric) {
+  dfs_list <- file_paths |>   
+    set_names(function(x) sub("\\..*$", "", basename(x))) |>
+    map(function(x) {
+      df <- read.csv(x)
+      sample_name <- sub("\\..*$", "", basename(x))
+      df <- df |> 
+        select(TaxonomyID,Genome,readsEM) |>
+        dplyr::rename(!!paste0(sample_name,".",pipeline) := readsEM)
+      return(df)
+    })
+  dfs_merged <- reduce(dfs_list, full_join, by = c("TaxonomyID", "Genome")) |>
+    mutate(across(where(is.numeric), ~ replace_na(.x, 0))) |>
+    dplyr::select(-Genome) |>
+  tibble::column_to_rownames("TaxonomyID") |>
+  dplyr::mutate_if(is.numeric, ~ . / sum(.))
+  
+  # Generate Matrix used for vegan::vegdist and full join ground_truth taxonomy
+  ms_dist_mat <- full_join(dfs_merged |> 
+            tibble::rownames_to_column("TaxonomyID") |>
+            mutate(TaxonomyID = as.numeric(TaxonomyID)), 
+          data.frame(TaxonomyID = as.numeric(ground_truth_taxonomy_taxids),
+                     Ground_Truth = rep(1/length(ground_truth_taxonomy_taxids),
+                                    length(ground_truth_taxonomy_taxids))),
+          by = "TaxonomyID") |>
+  mutate(across(everything(), ~ replace_na(.x, 0))) |>
+  column_to_rownames("TaxonomyID") |>
+  filter(rowSums(across(where(is.numeric))) > 0) |> 
+  t()
+
+  dist_mat <- vegan::vegdist(ms_dist_mat, method = distance_metric) |> as.matrix() |>
+    as.data.frame() |>
+    filter(row_number() <= n()-1) |>
+    pull(Ground_Truth)
+
+  return(dist_mat)
+  
+}
+
+## Function to generate distances for all outputs
+dist_from_ground_truth <- function(distance_metric) {
+  ms_dist <- dist_ms_to_ground_truth(list.files(path = "data_processed/kozich_2013/results", 
+                               pattern = ".metascope_id.csv", 
+                               full.names = TRUE, 
+                               recursive = TRUE),
+                    pipeline = "MetaScope",
+                    distance_metric = distance_metric)
+  ms_p_dist <- dist_ms_to_ground_truth(list.files(path = "data_processed/kozich_2013/results_priors", 
+                               pattern = ".metascope_id.csv", 
+                               full.names = TRUE, 
+                               recursive = TRUE),
+                    pipeline = "MetaScope Priors",
+                    distance_metric = distance_metric)
+  ms_p_b_dist <- dist_ms_to_ground_truth(list.files(path = "data_processed/kozich_2013/results_metablast_priors_1.0", 
+                               pattern = ".metascope_id.csv", 
+                               full.names = TRUE, 
+                               recursive = TRUE),
+                    pipeline = "MetaBlast",
+                    distance_metric = distance_metric)
+  
+  
+  dada2_dist <- dada2_df |> select(name, taxon, taxid, reads_count) |>
+    group_by(taxon, taxid, name) |>
+    summarise(reads_count = sum(reads_count), .groups = "drop") |>
+    pivot_wider(names_from = name, values_from = reads_count, values_fill = 0) |>
+    full_join(data.frame(taxid = as.numeric(ground_truth_taxonomy_taxids),
+                       Ground_Truth = rep(1/length(ground_truth_taxonomy_taxids),
+                                      length(ground_truth_taxonomy_taxids))),
+              by = "taxid") |>
+    mutate(taxon = if_else(is.na(taxon), taxonomizr::getTaxonomy(taxid, accessions_path, desiredTaxa = c("species")),
+                           taxon)) |>
+    mutate(across(everything(), ~ replace_na(.x, 0))) |>
+    tibble::column_to_rownames("taxon") |> # Using taxon for rowname instead of taxid because I labeled unknown taxids as 999999
+    select(-taxid) |>
+    t() |>
+    vegan::vegdist(method = distance_metric) |>
+    as.matrix() |>
+    as.data.frame() |>
+    filter(row_number() <= n()-1) |> # Remove the last row which contains ground_truth vs ground_truth
+    pull(Ground_Truth)
+  
+  qiime2_dist <- qiime2_df |> 
+    select(name, taxon, taxid, value) |>
+    group_by(taxon, taxid, name) |>
+    summarise(reads_count = sum(value), .groups = "drop") |>
+    pivot_wider(names_from = name, values_from = reads_count, values_fill = 0) |>
+    full_join(data.frame(taxid = as.numeric(ground_truth_taxonomy_taxids),
+                       Ground_Truth = rep(1/length(ground_truth_taxonomy_taxids),
+                                      length(ground_truth_taxonomy_taxids))),
+              by = "taxid") |>
+    mutate(taxon = if_else(is.na(taxon), taxonomizr::getTaxonomy(taxid, accessions_path, desiredTaxa = c("species")),
+                           taxon)) |>
+    mutate(across(everything(), ~ replace_na(.x, 0))) |>
+    tibble::column_to_rownames("taxon") |> # Using taxon for rowname instead of taxid because I labeled unknown taxids as 999999
+    select(-taxid) |>
+    t() |>
+    vegan::vegdist(method = distance_metric) |>
+    as.matrix() |>
+    as.data.frame() |>
+    filter(row_number() <= n()-1) |> # Remove the last row which contains ground_truth vs ground_truth
+    pull(Ground_Truth)
+  
+  merged_res <- tibble(
+    "QIIME2" = qiime2_dist,
+    "DADA2-NB" = dada2_dist,
+    "MetaScope" = ms_dist,
+    "MetaScope Priors" = ms_p_dist,
+    "MetaBlast" = ms_p_b_dist,
+    "distance_method" = distance_metric) |>
+  pivot_longer(cols = c("QIIME2","DADA2-NB","MetaScope","MetaScope Priors", "MetaBlast"), 
+               names_to = "pipeline", values_to = "distance_from_ground_truth")
+  merged_res$pipeline <-factor(merged_res$pipeline,
+                               levels = c("QIIME2", "DADA2-NB", "MetaScope", 
+                                          "MetaScope Priors", "MetaBlast"))
+  return(merged_res)
+}
+
+distance_res <- map_dfr(c("bray", "jaccard", "euclidean"), dist_from_ground_truth)
+
+
+ggplot(distance_res, aes(x = pipeline, y = distance_from_ground_truth)) +
+  geom_boxplot() +
+  geom_jitter() + 
+  facet_grid(~distance_method)
+
+  geom_jitter() +
+  #theme(axis.text.x = element_text(angle = 90)) +
+  xlab("Sum of total priors") + 
+  ylab("Percentage of Correct Calls") +
+  stat_compare_means(label.y = 1.05, method = "anova", paired = TRUE) +
+  stat_compare_means(comparisons = list(c("No Priors", "0.005"), 
+                                        c("0.005", "0.01"), c("0.005", "0.05")), 
+                     method = "wilcox.test", 
+                     paired = FALSE)
+
 ```
