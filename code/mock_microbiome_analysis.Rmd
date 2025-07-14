@@ -12,16 +12,14 @@ knitr::opts_chunk$set(cache=FALSE, cache.path=".cache/")
 
 ## Setup
 ```{r Loading in Libraries, message=FALSE}
+library("tidyverse")
 library("phyloseq")
-library("ggplot2")     
-library("dplyr")        
-library("tibble")
 library("ggpubr")
 library("DESeq2")
 library("ggsci")
 library("colorspace")
 library("flextable")
-library("purrr")
+library("pracma")
 ```
 
 ## Summarize MetaScope Results
@@ -185,7 +183,7 @@ colnames(dada2_df_cats) <- c("Species", "name", "prop", "pipeline")
 #write.csv(dada2_df_cats, file = "data_processed/kozich_2013/dada2_df.csv",
 #         row.names = FALSE)
 
-summary_df <- rbind(summary_df, dada2_df)
+summary_df <- rbind(summary_df, dada2_df_cats)
 ```
 
 # Summarize QIIME2 Results
@@ -293,6 +291,7 @@ plot(p1)
 
 ```
 
+## Accuracy Tables
 ```{r Accuracy Tables, echo=FALSE}
 calculate_accuracy_metrics <- function(profiler) {
   correct_call <- summary_df |> 
@@ -550,6 +549,7 @@ ggplot(hmp_test, aes(x=pipeline, y=Correct.Call)) +
                      limits = c(0,1.2))
 ```
 
+# PCOA Plots using phyloseq
 ```{r}
 accessions_path <- "reflib/accessionTaxa.sql"
 
@@ -622,6 +622,25 @@ merged_ps.ord <- ordinate(merged_ps, "PCoA", "jsd")
 plot_ordination(merged_ps, merged_ps.ord, type="samples", color="sample_name", shape= "pipeline", 
                   title="OTUs")
 ```
+
+```{r}
+dada2_tax <- dada2_df |>
+  select(taxid, Kingdom, Phylum, Class, Order, Family, Genus, Species) |>
+  rename(Kingdom = "domain", Phylum = "phylum", Class = "class", Order = "order",
+         Family = "family", Genus = "genus", Species = "species")
+
+dada2_otu <- dada2_df |>
+  select(taxid, reads_count, name) |>
+  mutate(dada2_name = paste0(name, ".dada2")) |>
+  select(-name) |>
+  group_by(taxid,dada2_name) |>
+  summarise(value = sum(reads_count)) |> 
+  pivot_wider(names_from = dada2_name, values_from = value) |>
+  mutate(across(everything(), ~ replace_na(.x, 0)))
+
+
+```
+
 
 # Using Vegan to determine distance matrices
 ```{r}
@@ -753,16 +772,172 @@ distance_res <- map_dfr(c("bray", "jaccard", "euclidean"), dist_from_ground_trut
 ggplot(distance_res, aes(x = pipeline, y = distance_from_ground_truth)) +
   geom_boxplot() +
   geom_jitter() + 
-  facet_grid(~distance_method)
+  facet_grid(~distance_method) + 
+  xlab("pipeline") + 
+  ylab("distance from ground truth") + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
 
-  geom_jitter() +
-  #theme(axis.text.x = element_text(angle = 90)) +
-  xlab("Sum of total priors") + 
-  ylab("Percentage of Correct Calls") +
-  stat_compare_means(label.y = 1.05, method = "anova", paired = TRUE) +
-  stat_compare_means(comparisons = list(c("No Priors", "0.005"), 
-                                        c("0.005", "0.01"), c("0.005", "0.05")), 
-                     method = "wilcox.test", 
-                     paired = FALSE)
+distance_res |> 
+  group_by(distance_method, pipeline) |>
+  summarise(mean = mean(distance_from_ground_truth),
+            sd = sd(distance_from_ground_truth))
+```
 
+
+
+```{r Precision, Recall, F1}
+# Helper function to read MetaScope results
+read_ms_results <- function(file_paths, pipeline) {
+  dfs_list <- file_paths |>   
+    set_names(function(x) sub("\\..*$", "", basename(x))) |>
+    map(function(x) {
+      df <- read.csv(x)
+      sample_name <- sub("\\..*$", "", basename(x))
+      df <- df |> 
+        select(TaxonomyID,Genome,readsEM) |>
+        dplyr::rename(!!sample_name := readsEM)
+      return(df)
+    })
+  dfs_merged <- reduce(dfs_list, full_join, by = c("TaxonomyID", "Genome")) |>
+    mutate(across(where(is.numeric), ~ replace_na(.x, 0))) |>
+    dplyr::select(-Genome) |>
+  tibble::column_to_rownames("TaxonomyID") |>
+  dplyr::mutate_if(is.numeric, ~ . / sum(.))
+  return(dfs_merged)
+}
+
+# Helper Function to calculate precision, recall, and F1 and species level 
+#  relative abundance threshold
+calc_prf <- function(abundance_threshold) {
+  dada2_prf <- dada2_df |> 
+    group_by(name, taxid) |>
+    summarise(value = sum(reads_count), .groups = "drop") |>  # Merge same sample and taxids together
+    filter(value > abundance_threshold) |>
+    mutate(abund_weight = 1 - abs(value - 1/21),
+           is_tp = taxid %in% ground_truth_taxonomy_taxids) |> # weight by distance from ground truth abundance
+    group_by(name) |> 
+    summarise(
+      TP = sum(is_tp),
+      precision = TP / n(),
+      recall = TP / length(ground_truth_taxonomy_taxids),
+      F1 = 2 * precision * recall / (precision + recall)) |>
+    mutate(pipeline = "DADA2-NB")
+  
+  qiime2_prf <- qiime2_df |> 
+    group_by(name, taxid) |>
+    summarise(value = sum(value), .groups = "drop") |> 
+    filter(value > abundance_threshold) |>
+    mutate(abund_weight = 1 - abs(value - 1/21),  # weight by distance from ground truth abundance
+           is_tp = taxid %in% ground_truth_taxonomy_taxids) |>
+    group_by(name) |>
+    summarise(
+      TP = sum(is_tp * abund_weight),
+      precision = TP / n(),
+      recall = TP / length(ground_truth_taxonomy_taxids),
+      F1 = 2 * precision * recall / (precision + recall)) |>
+    mutate(pipeline = "QIIME2")
+  
+  
+  
+  ms_prf <- read_ms_results(list.files(path = "data_processed/kozich_2013/results", 
+                                 pattern = ".metascope_id.csv", 
+                                 full.names = TRUE, 
+                                 recursive = TRUE),
+                      pipeline = "MetaScope") |>
+    tibble::rownames_to_column("taxid") |> 
+    pivot_longer(-taxid, names_to = "name", values_to = "value") |>
+    group_by(name) |>
+    filter(value > abundance_threshold) |>
+    mutate(abund_weight = 1 - abs(value - 1/21),
+           is_tp = taxid %in% ground_truth_taxonomy_taxids) |> # weight by distance from ground truth abundance
+    summarise(
+      TP = sum(is_tp),
+      precision = TP / n(),
+      recall = TP / length(ground_truth_taxonomy_taxids),
+      F1 = 2 * precision * recall / (precision + recall)) |>
+    mutate(pipeline = "MetaScope")
+  
+  ms_p_prf <- read_ms_results(list.files(path = "data_processed/kozich_2013/results_priors", 
+                                 pattern = ".metascope_id.csv", 
+                                 full.names = TRUE, 
+                                 recursive = TRUE),
+                      pipeline = "MetaScope Priors") |>
+    tibble::rownames_to_column("taxid") |> 
+    pivot_longer(-taxid, names_to = "name", values_to = "value") |>
+    group_by(name) |>
+    filter(value > abundance_threshold) |>
+    mutate(abund_weight = 1 - abs(value - 1/21),
+           is_tp = taxid %in% ground_truth_taxonomy_taxids) |> # weight by distance from ground truth abundance
+    summarise(
+      TP = sum(is_tp),
+      precision = TP / n(),
+      recall = TP / length(ground_truth_taxonomy_taxids),
+      F1 = 2 * precision * recall / (precision + recall)) |>
+    mutate(pipeline = "MetaScope Priors")
+  
+  ms_p_b_prf <- read_ms_results(list.files(path = "data_processed/kozich_2013/results_metablast_priors_1.0", 
+                                 pattern = ".metascope_id.csv", 
+                                 full.names = TRUE, 
+                                 recursive = TRUE),
+                      pipeline = "MetaBlast") |>
+    tibble::rownames_to_column("taxid") |> 
+    pivot_longer(-taxid, names_to = "name", values_to = "value") |>
+    group_by(name) |>
+    filter(value > abundance_threshold) |>
+    mutate(abund_weight = 1 - abs(value - 1/21),
+           is_tp = taxid %in% ground_truth_taxonomy_taxids) |> # weight by distance from ground truth abundance
+    summarise(
+      TP = sum(is_tp),
+      precision = TP / n(),
+      recall = TP / length(ground_truth_taxonomy_taxids),
+      F1 = 2 * precision * recall / (precision + recall)) |>
+    mutate(pipeline = "MetaBlast")
+  
+  merged_prf <- rbind(dada2_prf, qiime2_prf, ms_prf, ms_p_prf, ms_p_b_prf) |>
+    #pivot_longer(cols = c(precision, recall, F1), names_to = "metric_scores", values_to = "value") |>
+    select(-TP) |>
+    replace_na(list(value = 0))
+  merged_prf$pipeline <- factor(merged_prf$pipeline,
+                                 levels = c("QIIME2", "DADA2-NB", "MetaScope", 
+                                            "MetaScope Priors", "MetaBlast"))
+  merged_prf$abundance_threshold <- abundance_threshold
+  return(merged_prf)
+}
+
+
+threshold_vals <- c(0,1e-6,5e-6,1e-5,5e-5,1e-4,5e-4,1e-3,5e-3,1e-1,5e-1, 1)
+threshold_vals <- seq(0,0.1, 0.001)
+pr_curve_df <- map_dfr(threshold_vals,calc_prf)
+
+# Generate Precision Recall curve
+ggplot(pr_curve_df, aes(x = recall, y = precision, color = name)) + 
+  geom_path() + 
+  facet_grid(rows = vars(pipeline))
+
+# Calculate AUC for precision recall curve
+pr_curve_df |>
+  group_by(name, pipeline) |>
+  arrange(recall) |>
+  summarize(cum_area = trapz(recall, precision)) |>
+  ungroup() |>
+  group_by(pipeline) |>
+  summarize(aauc = mean(cum_area))
+
+pr_curve_df |>
+  group_by(name, pipeline) |>
+  arrange(recall) |>
+  summarize(cum_area = trapz(recall, precision)) |>
+  ggplot(aes(x = pipeline, y = cum_area)) + 
+  geom_boxplot()
+# F1 Curve
+ggplot(pr_curve_df, aes(x = abundance_threshold, y = F1, color = name)) + 
+  geom_path() + 
+  facet_grid(rows = vars(pipeline)) +
+  xlim(0,0.1)
+
+pr_curve_df |> 
+  filter(precision == 0, recall == 0) |>
+  group_by(pipeline) |>
+  summarise(min_abund = min(abundance_threshold), 
+            max_abund = max(abundance_threshold))
 ```
