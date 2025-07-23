@@ -20,6 +20,8 @@ library("ggsci")
 library("colorspace")
 library("flextable")
 library("pracma")
+library("purrr")
+library("paletteer")
 ```
 
 ## Summarize MetaScope Results
@@ -155,10 +157,13 @@ dada2_df$taxon[dada2_df$taxon == "Rhodobacter sphaeroides"] <- 'Cereibacter spha
 dada2_df$taxon[dada2_df$taxon == "Clostridium sensu stricto 1 beijerinckii"] <- 'Clostridium beijerinckii'
 dada2_df$taxon[dada2_df$taxon == "Escherichia-Shigella"] <- 'Escherichia' # Assuming DADA2 meant Escherichia, both are separate genera
 dada2_df$taxon[dada2_df$taxon == "Prevotella_9"] <- 'Segatella'
-dada2_df$taxon[dada2_df$taxon == "Prevotella_9 copri"] <- 'Segatella corpi'
+dada2_df$taxon[dada2_df$taxon == "Prevotella_9 copri"] <- 'Segatella copri'
 dada2_df$taxon[dada2_df$taxon == "Rhodobacteraceae"] <- 'Paracoccaceae'
 dada2_df$taxon[dada2_df$taxon == "Bacteroides massiliensis"] <- 'Phocaeicola massiliensis'
 dada2_df$taxon[dada2_df$taxon == "Ruminococcaceae"] <- 'Oscillospiraceae'
+dada2_df$taxon[dada2_df$taxon == "Clostridium sensu stricto 1"] <- 'Clostridium'
+dada2_df$taxon[dada2_df$taxon == "Planococcaceae"] <- 'Caryophanaceae'
+
 
 ## Add NCBI taxonomy ids
 dada2_df <- dada2_df |>
@@ -272,7 +277,8 @@ summary_df$pipeline <- factor(summary_df$pipeline,
                                                "MetaBlast"))
 
 num_colors <- 21
-wheel_colors <- colorspace::qualitative_hcl(num_colors, palette = "Dark3")
+#wheel_colors <- colorspace::qualitative_hcl(num_colors, palette = "Dark3")
+wheel_colors <- paletteer::paletteer_d("khroma::soil", num_colors)
 wheel_colors <- append(wheel_colors, c("grey85", "grey75"), after = 0)
 
 p1 <- ggplot(data = summary_df  , aes(fill = Species, y = prop, x = name)) +
@@ -287,7 +293,31 @@ p1 <- ggplot(data = summary_df  , aes(fill = Species, y = prop, x = name)) +
         panel.grid.major = element_blank(), 
         panel.grid.minor = element_blank(),
         panel.background = element_blank())
-plot(p1)                
+plot(p1)               
+```
+
+## Exporting for Figures
+```{r Exporting for Figures, eval=FALSE}
+p1 <- ggplot(data = summary_df  , aes(fill = Species, y = prop, x = name)) +
+  theme_gray(base_size = 7) +
+  geom_bar(position ="stack", stat = "identity")+
+  scale_fill_manual(values = wheel_colors, name = "Species") + 
+  ylab("Relative Abundance") + 
+  xlab("Samples") +
+  scale_y_continuous(breaks = seq(0,1, by = 0.1)) +
+  facet_grid(~pipeline) + 
+  theme(axis.text.x=element_blank(),
+        axis.ticks.x = element_blank(),
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        panel.background = element_blank(),
+        legend.key.size=unit(3,"mm"),
+        text=element_text(size=6))+ 
+  guides(fill=guide_legend(nrow=15,byrow=TRUE))
+
+ggsave(filename="figures/p1_stacked_relab_qdms.svg", plot=p1, dpi=450, 
+       width=180,height=90,units="mm",device="svg")
+
 
 ```
 
@@ -370,12 +400,17 @@ table_summary <- tidyr::tibble(
 )
 
 table <- flextable(data = table_summary) |>
-  width(width = 1.25) |>
-  bold(bold = TRUE, part = "header")
-  
-table
+  #width(width = 1.25) |>
+  bold(bold = TRUE, part = "header") |>
+  fontsize(size=6, part="all") |>
+  font(fontname="Arial")
+table_plot <- table |> gen_grob() |> plot()  
 ```
 
+```{r Exporting table, eval=FALSE}
+ggsave(filename="figures/t1_accuracy_table.svg", plot=table_plot, dpi=450, 
+       width=54,height=35,units="mm",device="svg")
+```
 
 ```{r Accuracy Calculations}
 # This metascope is k - 25
@@ -388,14 +423,16 @@ p_bar_with_stats<- summary_df |> dplyr::filter(Species %in% c("No Call", "Incorr
   ggplot(aes(x = pipeline, y = Correct.Call)) +
   geom_violin() + 
   geom_jitter() + 
-  ylim(0,1.3) + 
+  ylim(0,1.5) + 
   stat_compare_means(label.y = 1.3, method = "anova", paired = TRUE) +
-  stat_compare_means(comparisons = list(c("DADA2-NB", "MetaScope"), 
-                                        c("DADA2-NB", "MetaScope Priors"), 
-                                        c("MetaScope", "MetaScope Priors"),                                
-                                        c("MetaScope Priors", "MetaBlast")),
-                     method = "t.test", 
-                     paired = TRUE)
+  stat_compare_means(
+    comparisons = list(
+      c("DADA2-NB", "QIIME2"), 
+      c("DADA2-NB", "MetaScope"), 
+      c("MetaScope", "MetaScope Priors"),                             
+      c("MetaScope Priors", "MetaBlast")),
+    method = "t.test", 
+    paired = TRUE)
   
 p_bar_with_stats
 
@@ -479,6 +516,8 @@ priors_2.0 <- create_summary_df(
 
 summary_df_sensitivity <- rbind(priors_0, priors_0.005, priors_0.01, priors_0.05, priors_0.1, priors_0.5, priors_1.0, priors_2.0)
 
+summary_df_sensitivity <- rbind(priors_0, priors_0.005, priors_0.01, priors_0.1, priors_1.0)
+
 summary_df_sensitivity |> dplyr::filter(Species %in% c("Correct Call", "Incorrect Call")) |>
   tidyr::pivot_wider(names_from = Species, values_from = prop, names_repair = "universal") |>
   dplyr::mutate(Correct.Call = 1 - as.numeric(Incorrect.Call)) |>
@@ -491,7 +530,7 @@ summary_df_sensitivity |> dplyr::filter(Species %in% c("Correct Call", "Incorrec
   #theme(axis.text.x = element_text(angle = 90)) +
   xlab("Sum of total priors") + 
   ylab("Percentage of Correct Calls") +
-  stat_compare_means(label.y = 1.05, method = "anova", paired = TRUE) +
+  stat_compare_means(label.y = 1.0, method = "anova", paired = TRUE) +
   stat_compare_means(comparisons = list(c("No Priors", "0.005"), 
                                         c("0.005", "0.01"), c("0.005", "0.05")), 
                      method = "wilcox.test", 
@@ -549,98 +588,6 @@ ggplot(hmp_test, aes(x=pipeline, y=Correct.Call)) +
                      limits = c(0,1.2))
 ```
 
-# PCOA Plots using phyloseq
-```{r}
-accessions_path <- "reflib/accessionTaxa.sql"
-
-metascope_generate_ps_object <- function(file_paths, pipeline) {
-  dfs_list <- file_paths |>   
-    set_names(function(x) sub("\\..*$", "", basename(x))) |>
-    map(function(x) {
-      df <- read.csv(x)
-      sample_name <- sub("\\..*$", "", basename(x))
-      df <- df |> 
-        select(TaxonomyID,Genome,readsEM) |>
-        dplyr::rename(!!paste0(sample_name,".",pipeline) := readsEM)
-      return(df)
-    })
-  dfs_merged <- reduce(dfs_list, full_join, by = c("TaxonomyID", "Genome")) |>
-    mutate(across(where(is.numeric), ~ replace_na(.x, 0))) |>
-    dplyr::select(-Genome)
-  otu_mat <- dfs_merged |>
-    tibble::column_to_rownames("TaxonomyID") |>
-    as.matrix()
-  tax_mat <- dfs_merged$TaxonomyID |> taxonomizr::getTaxonomy(sqlFile = accessions_path) |>
-    as.matrix()
-  return(list(otu_mat, tax_mat))
-}
-ms_mats <- metascope_generate_ps_object(
-  list.files(path = "data_processed/kozich_2013/results", 
-             pattern = ".metascope_id.csv", 
-             full.names = TRUE, 
-             recursive = TRUE),
-             pipeline = "MetaScope")
-
-ground_truth_tax_mat <- ground_truth_taxonomy |>
-  mutate(taxid = taxonomizr::getId(species, accessions_path)) |>
-  tibble::column_to_rownames("taxid")
-
-ground_truth_otu_mat <- matrix(1/21, nrow = 21, ncol = 33, 
-                               dimnames = list(rownames(ground_truth_tax_mat), 
-                                               lapply(unique(ground_truth_df$name), paste0, ".", "ground_truth"))) |>
-  as.data.frame() |>
-  tibble::rownames_to_column("taxid")
-
-merged_otu_mat <- ms_mats[[1]] |>
-  as.data.frame() |> 
-  mutate(across(everything(), ~ .x / sum(.x))) |>
-  tibble::rownames_to_column("taxid") |> 
-  full_join(ground_truth_otu_mat, by = "taxid") |>
-  tibble::column_to_rownames("taxid") |>
-  mutate(across(everything(), ~ replace_na(.x, 0))) |>
-  as.matrix()
-
-merged_tax_mat <- ms_mats[[2]] |> 
-  as.data.frame() |> 
-  bind_rows(ground_truth_tax_mat) |>
-  dplyr::select(-kingdom) |>
-  distinct(.keep_all = TRUE) |>
-  as.matrix()
-
-merged_samples_df <- matrix(c(rep(unique(ground_truth_df$name), times = 2),
-                               rep(c("MetaScope", "Ground_Truth"), each = 33)),
-                             nrow = ncol(merged_otu_mat), ncol = 2, 
-                             dimnames = list(colnames(merged_otu_mat),
-                                             c("sample_name", "pipeline"))) |>
-  as.data.frame()
-
-merged_ps <- phyloseq::phyloseq(otu_table(merged_otu_mat, taxa_are_rows = TRUE),
-                   tax_table(merged_tax_mat),
-                   sample_data(merged_samples_df))
-
-merged_ps.ord <- ordinate(merged_ps, "PCoA", "jsd")
-plot_ordination(merged_ps, merged_ps.ord, type="samples", color="sample_name", shape= "pipeline", 
-                  title="OTUs")
-```
-
-```{r}
-dada2_tax <- dada2_df |>
-  select(taxid, Kingdom, Phylum, Class, Order, Family, Genus, Species) |>
-  rename(Kingdom = "domain", Phylum = "phylum", Class = "class", Order = "order",
-         Family = "family", Genus = "genus", Species = "species")
-
-dada2_otu <- dada2_df |>
-  select(taxid, reads_count, name) |>
-  mutate(dada2_name = paste0(name, ".dada2")) |>
-  select(-name) |>
-  group_by(taxid,dada2_name) |>
-  summarise(value = sum(reads_count)) |> 
-  pivot_wider(names_from = dada2_name, values_from = value) |>
-  mutate(across(everything(), ~ replace_na(.x, 0)))
-
-
-```
-
 
 # Using Vegan to determine distance matrices
 ```{r}
@@ -660,7 +607,7 @@ dist_ms_to_ground_truth <- function(file_paths, pipeline, distance_metric) {
         dplyr::rename(!!paste0(sample_name,".",pipeline) := readsEM)
       return(df)
     })
-  dfs_merged <- reduce(dfs_list, full_join, by = c("TaxonomyID", "Genome")) |>
+  dfs_merged <- purrr::reduce(dfs_list, full_join, by = c("TaxonomyID", "Genome")) |>
     mutate(across(where(is.numeric), ~ replace_na(.x, 0))) |>
     dplyr::select(-Genome) |>
   tibble::column_to_rownames("TaxonomyID") |>
@@ -769,21 +716,25 @@ dist_from_ground_truth <- function(distance_metric) {
 distance_res <- map_dfr(c("bray", "jaccard", "euclidean"), dist_from_ground_truth)
 
 
-ggplot(distance_res, aes(x = pipeline, y = distance_from_ground_truth)) +
-  geom_boxplot() +
-  geom_jitter() + 
+p4 <- ggplot(distance_res, aes(x = pipeline, y = distance_from_ground_truth, color=pipeline)) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_jitter(size=0.25) + 
   facet_grid(~distance_method) + 
-  xlab("pipeline") + 
-  ylab("distance from ground truth") + 
-  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
-
+  xlab("Pipeline") + 
+  ylab("Distance from Ground Truth") + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1),
+        text=element_text(size=6))
+p4
 distance_res |> 
   group_by(distance_method, pipeline) |>
   summarise(mean = mean(distance_from_ground_truth),
             sd = sd(distance_from_ground_truth))
 ```
 
-
+```{r Saving beta diversity, eval=FALSE}
+ggsave(filename="figures/p4_beta_diversity.svg", plot=p4, dpi=450, 
+       width=88,height=58,units="mm",device="svg")
+```
 
 ```{r Precision, Recall, F1}
 # Helper function to read MetaScope results
@@ -798,7 +749,7 @@ read_ms_results <- function(file_paths, pipeline) {
         dplyr::rename(!!sample_name := readsEM)
       return(df)
     })
-  dfs_merged <- reduce(dfs_list, full_join, by = c("TaxonomyID", "Genome")) |>
+  dfs_merged <- purrr::reduce(dfs_list, full_join, by = c("TaxonomyID", "Genome")) |>
     mutate(across(where(is.numeric), ~ replace_na(.x, 0))) |>
     dplyr::select(-Genome) |>
   tibble::column_to_rownames("TaxonomyID") |>
@@ -909,19 +860,32 @@ threshold_vals <- c(0,1e-6,5e-6,1e-5,5e-5,1e-4,5e-4,1e-3,5e-3,1e-1,5e-1, 1)
 threshold_vals <- seq(0,0.1, 0.001)
 pr_curve_df <- map_dfr(threshold_vals,calc_prf)
 
-# Generate Precision Recall curve
-ggplot(pr_curve_df, aes(x = recall, y = precision, color = name)) + 
-  geom_path() + 
-  facet_grid(rows = vars(pipeline))
-
 # Calculate AUC for precision recall curve
-pr_curve_df |>
+aauc <- pr_curve_df |>
   group_by(name, pipeline) |>
   arrange(recall) |>
   summarize(cum_area = trapz(recall, precision)) |>
   ungroup() |>
   group_by(pipeline) |>
   summarize(aauc = mean(cum_area))
+
+# Generate Precision Recall curve
+p5<- ggplot(pr_curve_df, aes(x = recall, y = precision, color = name)) + 
+  geom_path(show.legend=FALSE) + 
+  facet_grid(rows = vars(pipeline)) + 
+  geom_text(
+    data = aauc, 
+    aes(x = 0.125, y = ifelse(aauc>0.5, 0.25, 0.75),
+        label = paste0("AAUC = ", round(aauc,3))),
+    inherit.aes = FALSE,
+    size = 5 / (14/5)
+  ) + 
+    theme(text=element_text(size=5))
+
+p5
+
+#ggsave(filename="figures/p5_pr_curve.svg", plot=p5, dpi=450, 
+#       width=60,height=75,units="mm",device="svg")
 
 pr_curve_df |>
   group_by(name, pipeline) |>
@@ -930,14 +894,56 @@ pr_curve_df |>
   ggplot(aes(x = pipeline, y = cum_area)) + 
   geom_boxplot()
 # F1 Curve
-ggplot(pr_curve_df, aes(x = abundance_threshold, y = F1, color = name)) + 
-  geom_path() + 
+max_f1_thresholds <- pr_curve_df |>
+  group_by(pipeline, name) |>
+  filter(F1 == max(F1, na.rm = TRUE)) |>
+  summarise(
+    abundance_threshold = mean(abundance_threshold, na.rm = TRUE),
+    F1 = F1
+  ) |>
+  ungroup() |>
+  group_by(pipeline) |>
+  summarise(abundance_threshold = mean(abundance_threshold), 
+            F1 = mean(F1))
+
+p6 <- ggplot(pr_curve_df, aes(x = abundance_threshold, y = F1, color = name)) + 
+  geom_path(show.legend=FALSE) + 
   facet_grid(rows = vars(pipeline)) +
-  xlim(0,0.1)
+  geom_vline(
+    data = max_f1_thresholds,
+    aes(xintercept = abundance_threshold),
+    linetype = "dashed",
+    linewidth = 0.5
+  )  + 
+  geom_text(
+    data = max_f1_thresholds, 
+    aes(x = abundance_threshold + 0.015, y = ifelse(F1<0.4, 0.7, 0.5) ,
+        label = paste0("F1 = ", round(F1,3), "\nThreshold = ", round(abundance_threshold,3))),
+    size = 5 / (14/5),
+    inherit.aes = FALSE
+  ) + 
+  geom_vline(
+    aes(xintercept = 1/21), 
+    linetype = "dotted",
+    linewidth = 0.5
+  ) +
+  theme(text=element_text(size=5))
+p6
+
+#ggsave(filename="figures/p6_f1_curve.svg", plot=p6, dpi=450, 
+#       width=60,height=75,units="mm",device="svg")
 
 pr_curve_df |> 
   filter(precision == 0, recall == 0) |>
   group_by(pipeline) |>
   summarise(min_abund = min(abundance_threshold), 
             max_abund = max(abundance_threshold))
+```
+
+```{r}
+pr_curve_df |> 
+  mutate(fpr = 1 - recall) |>
+  ggplot(aes(x = fpr, y = precision, color = name)) + 
+  geom_path() + 
+  facet_grid(rows = vars(pipeline))
 ```
