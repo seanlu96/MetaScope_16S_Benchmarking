@@ -47,7 +47,8 @@ dada2_df <- psmelt(ps_dada2) |>
   dplyr::rename(Superkingdom = Kingdom)
 dada2_df$pipeline = "DADA2"
 
-qiime2_df <- psmelt(ps_qiime2)
+qiime2_df <- psmelt(ps_qiime2) |>
+  dplyr::select(-Confidence)
 qiime2_df$pipeline = "QIIME2"
 
 ms_df <- psmelt(ps_ms)
@@ -66,7 +67,8 @@ dada2_relab_df <- phylosmith::relative_abundance(ps_dada2) |>
 dada2_relab_df$pipeline = "DADA2"
 
 qiime2_relab_df <- phylosmith::relative_abundance(ps_qiime2) |>
-  phyloseq::psmelt()
+  phyloseq::psmelt() |>
+  dplyr::select(-Confidence)
 qiime2_relab_df$pipeline = "QIIME2"
 
 ms_relab_df <- phylosmith::relative_abundance(ps_ms) |>
@@ -189,21 +191,36 @@ top_species <- merged_relab_df |>
   dplyr::group_by(Species, Genus) |>
   dplyr::summarise(total_abund = sum(Abundance), .groups = "drop") |>
   dplyr::filter(!is.na(Species)) |>
-  slice_max(order_by=total_abund, n = 25) |>
-  pull(Species) |>
-  sort()
+  dplyr::filter(Species != "uncultured_bacterium") |>
+  slice_max(order_by=total_abund, n = 24) |>
+  pull(Species)
 
-relab_species <- ggplot(merged_df, 
+num_colors <- 24
+wheel_colors <- c(paletteer::paletteer_d("khroma::soil", num_colors),"gray55")
+merged_df_plot <- merged_df |>
+  mutate(Species = ifelse(Species %in% top_species, Species, "Other"))
+merged_df_plot$Species <- factor(merged_df_plot$Species, levels = c(top_species, "Other"))
+color_map <- setNames(wheel_colors, levels(merged_df$Species))
+
+
+
+relab_species <- ggplot(merged_df_plot, 
                         aes(x = Sample, y = Abundance, fill = Species)) + 
   geom_bar(position ="fill",stat = "identity") + 
   facet_grid(cols = vars(Sample_type, status),
              rows = vars(pipeline), 
              scales = "free_x") +
-  scale_fill_discrete(breaks = top_species) + 
+  scale_fill_manual(values = color_map,
+                    breaks = levels(merged_df_plot$Species)) + 
   theme(axis.text.x=element_blank(),
-        axis.ticks.x=element_blank())
+        axis.ticks.x=element_blank(),
+        text=element_text(size=6), 
+        legend.key.size=unit(3,"mm"))
 relab_species
-relab_species_legend <- get_legend(relab_species)
+
+ggsave(filename="figures/p7_botero_relab.png", plot=relab_species, dpi=450, 
+       width=180,height=90,units="mm",device="png")
+
 
 merged_relab_df |>
   dplyr::filter(Species %in% top_species) |>
@@ -302,6 +319,7 @@ high_abund_species <- merged_df |>
   geom_bar(position="dodge", stat="identity") + 
   facet_grid(vars(pipeline), vars(status)) + 
   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+
 high_abund_species
 ```
 
@@ -334,9 +352,68 @@ abundance_heatmap(ps_dada2_filt, classification = 'Genus',
 ```
 
 ## Plotting Alpha Diversity
+```{r Alpha Diversity Function}
+phyloseq_obj <- ps_ms
+treatment = c("status", "Sample_type")
+subset = NULL
+index = "shannon"
+
+alpha_diversity_table <- function(
+  phyloseq_obj,
+  treatment = NULL,
+  subset = NULL,
+  index = "shannon",
+  pipeline = NULL
+) {
+  phyloseq_obj <-
+    taxa_filter(phyloseq_obj, treatment = treatment, subset = subset)
+  treatment_name <- paste(treatment, collapse = "_")
+  alpha <- data.table::data.table(as(phyloseq_obj@otu_table, "matrix"))
+  alpha <- alpha[, lapply(.SD, function(sample) sample / sum(sample))]
+  if (index == "shannon") {
+    alpha <- -alpha * log(alpha)
+  } else {
+    alpha <- alpha * alpha
+  }
+  alpha <- alpha[, lapply(.SD, sum, na.rm = TRUE)]
+  if (index == "simpson") {
+    alpha <- 1 - alpha
+  } else if (index == "invsimpson") {
+    alpha <- 1 / alpha
+  }
+  graph_data <- data.table::data.table(
+    Sample = sample_names(phyloseq_obj),
+    Alpha = unlist(alpha)
+  )
+  graph_data <- merge(graph_data,
+    data.table::as.data.table(as(phyloseq_obj@sam_data, "data.frame"),
+    keep.rownames = "Sample"), by = "Sample")
+  graph_data$pipeline <- pipeline
+  return(graph_data)
+}
+
+alpha_div_df <- purrr::map2_dfr(
+  .x = list(ps_ms, ps_dada2, ps_qiime2), 
+  .y = c("MetaScope", "DADA2", "QIIME2"),  
+  .f = ~ alpha_diversity_table(
+    phyloseq_obj = .x,
+    treatment = c("status", "Sample_type"), 
+    subset = NULL, 
+    index = "shannon",
+    pipeline = .y))
+
+g <- ggplot(alpha_div_df, aes(x=status_Sample_type, y=Alpha)) + 
+  geom_boxplot(show.legend = FALSE, outliers = FALSE) +
+  geom_point() + 
+  scale_y_continuous(limits = c(0, ceiling(max(g$data$Alpha)))) + 
+  facet_grid(~pipeline)
+g
+    
+```
+
 ```{r Alpha Diversity}
-p2_1 <- plot_richness(ps_ms_oral, measures=c("Observed", "Shannon", "Simpson", "InvSimpson"),
-                      x = "status")+ 
+p2_1 <- plot_richness(ps_ms, measures=c("Observed", "Shannon", "Simpson", "InvSimpson"),
+                      x = c("status")) + 
   stat_compare_means(label = "p.signif", label.x = 1.5, comparisons = list(c("Control", "TB")),
                      method = "wilcox.test") + 
   geom_boxplot()
@@ -366,7 +443,7 @@ p2_6 <- plot_richness(ps_qiime2_nasal, measures=c("Observed", "Shannon", "Simpso
   geom_boxplot()
 
 
-ggarrange(p2_1, p2_2, p2_3, p2_4, p2_5, p2_6, labels = "AUTO")
+ggarrange(p2_1, p2_2, p2_3, p2_4, p2_5, p2_6)
 ```
 
 ## PCOA Plots
