@@ -23,15 +23,15 @@ library("EnhancedVolcano")
 library("microbiome")
 library("eulerr")
 library("ggVennDiagram")
+library("tidyr")
+library("rstatix")
 ```
 
 
 ## Load in processed Data
 ```{r, eval=TRUE, include=TRUE}
 ps_dada2 <- readRDS("data_processed/botero_2014/ps_dada2.rds") 
-#tax_glom(taxrank = "Species")
 ps_qiime2 <- readRDS("data_processed/botero_2014/ps_qiime2.rds")
-#tax_glom(taxrank = "Species")
 ps_ms <- readRDS("data_processed/botero_2014/ps_metascope.rds")
 
 ps_dada2_oral <- subset_samples(ps_dada2, Sample_type == "Oropharynx")
@@ -70,6 +70,8 @@ qiime2_relab_df <- phylosmith::relative_abundance(ps_qiime2) |>
   phyloseq::psmelt() |>
   dplyr::select(-Confidence)
 qiime2_relab_df$pipeline = "QIIME2"
+qiime2_relab_df <- qiime2_relab_df |>
+  dplyr::mutate(Species = gsub("_", " ", Species))
 
 ms_relab_df <- phylosmith::relative_abundance(ps_ms) |>
   phyloseq::psmelt()
@@ -143,13 +145,17 @@ top_genera <- merged_relab_df |>
   pull(Genus) |>
   sort()
 
-relab_genus <- ggplot(merged_df, 
+genera_df <- merged_relab_df |>
+  mutate(Genus = ifelse(Genus %in% top_genera, Genus, "Other"))
+
+relab_genus <- ggplot(genera_df, 
                         aes(x = Sample, y = Abundance, fill = Genus)) + 
   geom_bar(position ="fill",stat = "identity") + 
   facet_grid(cols = vars(Sample_type, status),
              rows = vars(pipeline),
              scales = "free_x") +
-  scale_fill_discrete(breaks = top_genera) + 
+  scale_fill_manual(values = c(paletteer::paletteer_d("khroma::soil", 10),"gray55"),
+                    breaks = c(top_genera, "Other")) + 
   theme(axis.text.x=element_blank(),
         axis.ticks.x=element_blank())
 relab_genus
@@ -183,26 +189,26 @@ ggsave(file="figures/p2_legend.svg", plot=as_ggplot(relab_genus_legend),
 ```
 At the genus level, still DADA2 and MetaScope have similar relative abundances
 and identify the same genera that are differentially expressed. Notably, DADA2 
-identifies more Actinobacillus 
+identifies more NAs 
 
 ### Species Level Abundances
 ```{r Species Level Abundances}
 top_species <- merged_relab_df |>
-  dplyr::group_by(Species, Genus) |>
+  dplyr::group_by(Species) |>
   dplyr::summarise(total_abund = sum(Abundance), .groups = "drop") |>
   dplyr::filter(!is.na(Species)) |>
-  dplyr::filter(Species != "uncultured_bacterium") |>
+  #dplyr::filter(Species != "uncultured bacterium") |>
   slice_max(order_by=total_abund, n = 24) |>
   pull(Species)
 
 num_colors <- 24
 wheel_colors <- c(paletteer::paletteer_d("khroma::soil", num_colors),"gray55")
-merged_df_plot <- merged_df |>
+merged_df_plot <- merged_relab_df |>
   mutate(Species = ifelse(Species %in% top_species, Species, "Other"))
 merged_df_plot$Species <- factor(merged_df_plot$Species, levels = c(top_species, "Other"))
-color_map <- setNames(wheel_colors, levels(merged_df$Species))
+merged_df_plot$pipeline <- factor(merged_df_plot$pipeline, levels = c("MetaScope", "DADA2", "QIIME2"))
 
-
+color_map <- setNames(wheel_colors, levels(merged_relab_df$Species))
 
 relab_species <- ggplot(merged_df_plot, 
                         aes(x = Sample, y = Abundance, fill = Species)) + 
@@ -214,8 +220,8 @@ relab_species <- ggplot(merged_df_plot,
                     breaks = levels(merged_df_plot$Species)) + 
   theme(axis.text.x=element_blank(),
         axis.ticks.x=element_blank(),
-        text=element_text(size=6), 
-        legend.key.size=unit(3,"mm"))
+        text=element_text(size=8), 
+        legend.key.size=unit(4,"mm"))
 relab_species
 
 ggsave(filename="figures/p7_botero_relab.png", plot=relab_species, dpi=450, 
@@ -283,6 +289,50 @@ merged_df |> dplyr::filter(pipeline == "QIIME2", Sample_type == "Sputum") |>
   dplyr::arrange(desc(mean))
 ```
 
+## Plotting Unknown Species
+```{r}
+merged_relab_df |>
+  dplyr::filter(is.na(Species) | grepl("uncultured", Species)) |>
+  dplyr::filter(Abundance > 0) |>
+  dplyr::group_by(Sample, pipeline) |>
+  dplyr::summarise(Abundance = sum(Abundance), 
+                   Sample_type = Sample_type, 
+                   status = status) |>
+  dplyr::ungroup() |>
+  ggplot(aes(x = Sample_type, y = Abundance, fill = pipeline)) + 
+  geom_boxplot() +
+  geom_jitter(width = 0.1) +
+  facet_grid(vars(status))
+
+
+merged_relab_df |>
+  dplyr::filter(is.na(Species) | grepl("uncultured", Species)) |>
+  dplyr::filter(Abundance > 0, pipeline %in% c("DADA2", "QIIME2")) |>
+  dplyr::group_by(Sample, pipeline, Sample_type, status) |>
+  dplyr::summarise(Abundance = sum(Abundance), .groups = "drop") |>
+  
+  ggplot(aes(x = pipeline, y = Abundance, fill = pipeline)) +
+  geom_boxplot(position = position_dodge(width = 0.75)) +
+  geom_jitter(
+    color = "black",
+    position = position_jitterdodge(jitter.width = 0.2, dodge.width = 0.75),
+    alpha = 0.6, size = 1.5
+  ) +
+  scale_y_continuous(breaks = seq(0, 1, 0.2), limits = c(0, 1.1)) +  
+  stat_compare_means(
+    method = "wilcox.test",
+    label = "p.signif",
+    comparisons = list(c("DADA2", "QIIME2")),
+    position = position_dodge(width = 0.75),
+    label.y= 1,
+  ) +
+  facet_grid(rows = vars(Sample_type), cols = vars(status))
+
+
+  
+
+```
+
 ## Filtered abundance barplots
 ```{r Filtered abundance plots}
 high_abund_dada2 <- merged_df |> 
@@ -313,11 +363,12 @@ dada2_unique_species <- merged_df |>
   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
 dada2_unique_species
 
-high_abund_species <- merged_df |> 
-  dplyr::filter(Species %in% select_species_both) |>
-  ggplot(aes(fill=Sample_type, y=Abundance, x=Species)) + 
+high_abund_species <- merged_relab_df |> 
+  dplyr::filter(Abundance > 0.05) |>
+  ggplot(aes(fill=Genus, y=Abundance, x=Species)) + 
   geom_bar(position="dodge", stat="identity") + 
-  facet_grid(vars(pipeline), vars(status)) + 
+  facet_grid(rows=vars(pipeline), cols=vars(status,Sample_type), 
+             scales = "free_x") + 
   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
 
 high_abund_species
@@ -363,8 +414,8 @@ alpha_diversity_table <- function(
   treatment = NULL,
   subset = NULL,
   index = "shannon",
-  pipeline = NULL
-) {
+  pipeline = NULL) 
+  {
   phyloseq_obj <-
     taxa_filter(phyloseq_obj, treatment = treatment, subset = subset)
   treatment_name <- paste(treatment, collapse = "_")
@@ -401,49 +452,45 @@ alpha_div_df <- purrr::map2_dfr(
     subset = NULL, 
     index = "shannon",
     pipeline = .y))
-
-g <- ggplot(alpha_div_df, aes(x=status_Sample_type, y=Alpha)) + 
-  geom_boxplot(show.legend = FALSE, outliers = FALSE) +
-  geom_point() + 
-  scale_y_continuous(limits = c(0, ceiling(max(g$data$Alpha)))) + 
-  facet_grid(~pipeline)
-g
-    
 ```
 
 ```{r Alpha Diversity}
-p2_1 <- plot_richness(ps_ms, measures=c("Observed", "Shannon", "Simpson", "InvSimpson"),
-                      x = c("status")) + 
-  stat_compare_means(label = "p.signif", label.x = 1.5, comparisons = list(c("Control", "TB")),
-                     method = "wilcox.test") + 
-  geom_boxplot()
+clean_richness <- function(ps_obj, pipeline) {
+  richness_df <- estimate_richness(ps_obj) |>
+    merge(sample_data(ps_obj), by = 0) |>
+    mutate(pipeline = pipeline) |>
+    pivot_longer(cols = c(Observed, Shannon, Simpson, InvSimpson), names_to = "metric", values_to = "value")|>
+    filter(Sample_type != "Sputum")
+  return(richness_df)
+}
+merged_richness <- purrr::map2_dfr(list(ps_ms, ps_dada2, ps_qiime2), list("MetaScope", "DADA2", "QIIME2"), clean_richness)
 
-p2_2 <- plot_richness(ps_dada2_oral, measures=c("Observed", "Shannon", "Simpson", "InvSimpson"), x = "status") + 
-  stat_compare_means(label = "p.signif", label.x = 1.5, comparisons = list(c("Control", "TB")),
-                     method = "wilcox.test") + 
-  geom_boxplot()
+clean_wilcox <- function(ps_obj, pipeline) {
+  res <- clean_richness(ps_obj, pipeline) |> 
+    group_by(Sample_type, pipeline, metric) |>
+    wilcox_test(value ~ status) |>
+    add_y_position(fun = "max", step.increase = 0.12, 
+                   data = group_by(clean_richness(ps_obj, pipeline), Sample_type, pipeline, metric),
+                   scales = "free_y") |>
+    ungroup() |>
+    adjust_pvalue(method = "fdr") |>
+    mutate(label = ifelse((p.adj < 0.05), "*", "ns"))
+  return(res)
+}
 
+merged_wilcox_test <- purrr::map2_dfr(list(ps_ms, ps_dada2, ps_qiime2), list("MetaScope", "DADA2", "QIIME2"), clean_wilcox)
 
-p2_3 <- plot_richness(ps_qiime2_oral, measures=c("Observed", "Shannon", "Simpson", "InvSimpson"),
-                      x = "status")+ 
-  stat_compare_means(label = "p.signif", label.x = 1.5, comparisons = list(c("Control", "TB")),
-                     method = "wilcox.test") + 
-  geom_boxplot()
-
-p2_4 <- plot_richness(ps_ms_nasal, measures=c("Observed", "Shannon", "Simpson", "InvSimpson"), x = "status") + 
-  stat_compare_means(label = "p.signif", label.x = 1.5, comparisons = list(c("Control", "TB")),method = "wilcox.test") + 
-  geom_boxplot()
-
-p2_5 <- plot_richness(ps_dada2_nasal, measures=c("Observed", "Shannon","Simpson", "InvSimpson"), x = "status") + 
-  stat_compare_means(label = "p.signif", label.x = 1.5, comparisons = list(c("Control", "TB")), method = "wilcox.test") + 
-  geom_boxplot()
-
-p2_6 <- plot_richness(ps_qiime2_nasal, measures=c("Observed", "Shannon", "Simpson", "InvSimpson"), x = "status") + 
-  stat_compare_means(label = "p.signif", label.x = 1.5, comparisons = list(c("Control", "TB")), method = "wilcox.test") + 
-  geom_boxplot()
-
-
-ggarrange(p2_1, p2_2, p2_3, p2_4, p2_5, p2_6)
+merged_richness$metric <- factor(merged_richness$metric, levels = c("Observed", "Shannon", "Simpson", "InvSimpson"))
+merged_richness$pipeline <- factor(merged_richness$pipeline, levels = c("MetaScope", "DADA2", "QIIME2"))
+merged_wilcox_test$metric <- factor(merged_wilcox_test$metric, levels = c("Observed", "Shannon", "Simpson", "InvSimpson"))
+merged_wilcox_test$pipeline <- factor(merged_wilcox_test$pipeline, levels = c("MetaScope", "DADA2", "QIIME2"))
+ggplot(merged_richness, aes(x = status, y = value)) + 
+  geom_point() + 
+  geom_boxplot() + 
+  ggh4x::facet_nested(Sample_type ~ pipeline + metric, scales = "free_y", independent = "y") +
+  stat_pvalue_manual(mutate(merged_wilcox_test, y.position = y.position * 1.05), 
+                     label = "label", y.position = "y.position") 
+  #scale_y_continuous(expand = expansion(mult = c(0, 0.07)))
 ```
 
 ## PCOA Plots
@@ -496,6 +543,7 @@ ps_ms_rel <- microbiome::transform(ps_ms, "compositional")
 ps_dada2_rel <- microbiome::transform(ps_dada2, "compositional")
 ps_qiime2_rel <- microbiome::transform(ps_qiime2, "compositional")
 
+
 list_core_ms <- c()
 groups <- list(c("TB", "Sputum"), c("TB", "Nasal"), c("TB", "Oropharynx"),
                c("Control", "Nasal"), c("Control", "Oropharynx"))
@@ -544,13 +592,13 @@ p4_3 <- ggVennDiagram(list_core_qiime2, label_geom = "text", label = "count") +
   theme(plot.title = element_text(hjust = 0.5))
 
 
-ggarrange(p4_1, p4_2,p4_3, labels = "AUTO", common.legend = TRUE, legend = "right")
+ggarrange(p4_1, p4_2,p4_3, labels = "AUTO", common.legend = TRUE, legend = "right", nrows = 1)
 ```
 
 ```{r}
-ps_ms_rel_genus <- microbiome::transform(ps_ms_genus, "compositional")
-ps_dada2_rel_genus <- microbiome::transform(ps_dada2_genus, "compositional")
-ps_qiime2_rel_genus <- microbiome::transform(ps_qiime2_genus, "compositional")
+ps_ms_rel_genus <- microbiome::transform(tax_glom(ps_ms_rel, taxrank="Genus"), "compositional")
+ps_dada2_rel_genus <- microbiome::transform(tax_glom(ps_dada2_rel, taxrank="Genus"), "compositional")
+ps_qiime2_rel_genus <- microbiome::transform(tax_glom(ps_qiime2_rel, taxrank="Genus"), "compositional")
 
 list_core_ms <- c()
 groups <- list(c("TB", "Sputum"), c("TB", "Nasal"), c("TB", "Oropharynx"),
@@ -598,60 +646,5 @@ core_microbiome_figure <- ggarrange(p4_1, p4_2, p4_3, p4_4, p4_5, p4_6,
           labels = "AUTO", common.legend = TRUE, legend = "right")
 annotate_figure(core_microbiome_figure,
                 left = "Genus                                                                   Species")
-```
-
-
-```{r}
-deseq_ms_oral = phyloseq_to_deseq2(ps_ms_oral, ~ status)
-deseq_ms_oral = estimateSizeFactors(deseq_ms_oral, type = 'poscounts')
-deseq_ms_oral = DESeq(deseq_ms_oral, test="Wald", fitType="parametric")
-deseq_ms_oral_res = results(deseq_ms_oral, cooksCutoff = FALSE)
-deseq_ms_oral_res <- cbind(deseq_ms_oral_res, 
-                           as(tax_table(ps_ms_oral)[rownames(deseq_ms_oral_res), ], "matrix"))
-
-EnhancedVolcano(deseq_ms_oral_res,
-  lab = deseq_ms_oral_res$Species,
-  x = 'log2FoldChange',
-  y = 'pvalue')
-
-deseq_ms_nasal = phyloseq_to_deseq2(ps_ms_nasal, ~ status)
-deseq_ms_nasal = estimateSizeFactors(deseq_ms_nasal, type = 'poscounts')
-deseq_ms_nasal = DESeq(deseq_ms_nasal, test="Wald", fitType="parametric")
-deseq_ms_nasal_res = results(deseq_ms_nasal, cooksCutoff = FALSE)
-deseq_ms_nasal_res <- cbind(deseq_ms_nasal_res, 
-                           as(tax_table(ps_ms_nasal)[rownames(deseq_ms_nasal_res), ], "matrix"))
-
-EnhancedVolcano(deseq_ms_nasal_res,
-  lab = deseq_ms_nasal_res$Species,
-  x = 'log2FoldChange',
-  y = 'pvalue')
-
-ps_dada2_species <- ps_dada2 |> tax_glom(taxrank="Species")
-ps_dada2_oral <- subset_samples(ps_dada2_species, Sample_type == "Oropharynx")
-  
-deseq_dada2_oral = phyloseq_to_deseq2(ps_dada2_oral, ~ status)
-deseq_dada2_oral = estimateSizeFactors(deseq_dada2_oral, type = 'poscounts')
-deseq_dada2_oral = DESeq(deseq_dada2_oral, test="Wald", fitType="parametric")
-
-deseq_dada2_oral_res = results(deseq_dada2_oral, cooksCutoff = FALSE)
-deseq_dada2_oral_res <- cbind(deseq_dada2_oral_res, 
-                              as(tax_table(ps_dada2_oral)[rownames(deseq_dada2_oral_res), ], "matrix"))
-EnhancedVolcano(deseq_dada2_oral_res,
-  lab = paste0(deseq_dada2_oral_res$Genus, " ", deseq_dada2_oral_res$Species),
-  x = 'log2FoldChange',
-  y = 'pvalue')
-
-deseq_dada2_nasal = phyloseq_to_deseq2(ps_dada2_nasal, ~ status)
-deseq_dada2_nasal = estimateSizeFactors(deseq_dada2_nasal, type = 'poscounts')
-deseq_dada2_nasal = DESeq(deseq_dada2_nasal, test="Wald", fitType="parametric")
-
-deseq_dada2_nasal_res = results(deseq_dada2_nasal, cooksCutoff = FALSE)
-deseq_dada2_nasal_res <- cbind(deseq_dada2_nasal_res, 
-                              as(tax_table(ps_dada2_nasal)[rownames(deseq_dada2_nasal_res), ], "matrix"))
-EnhancedVolcano(deseq_dada2_nasal_res,
-  lab = paste0(deseq_dada2_nasal_res$Genus, " ", deseq_dada2_nasal_res$Species),
-  x = 'log2FoldChange',
-  y = 'pvalue')
-
 ```
 
