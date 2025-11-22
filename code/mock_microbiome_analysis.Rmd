@@ -385,15 +385,21 @@ p_bar_with_stats<- summary_df |> dplyr::filter(Species %in% c("No Call", "Incorr
   dplyr::group_by(name) |> 
   ggplot(aes(x = pipeline, y = Correct.Call)) +
   geom_violin() + 
-  geom_jitter() + 
-  ylim(0,1.3) + 
-  stat_compare_means(label.y = 1.3, method = "anova", paired = TRUE) +
-  stat_compare_means(comparisons = list(c("DADA2-NB", "MetaScope"), 
-                                        c("DADA2-NB", "MetaScope Priors"), 
-                                        c("MetaScope", "MetaScope Priors"),                                
-                                        c("MetaScope Priors", "MetaBlast")),
-                     method = "t.test", 
-                     paired = TRUE)
+  geom_jitter(width = .2) + 
+  #ylim(0,1.3) + 
+  stat_compare_means(label.y = 1.5, method = "anova", paired = TRUE) +
+  stat_compare_means(
+    comparisons = list(
+      c("QIIME2", "DADA2-NB"),
+      c("QIIME2", "MetaScope"),
+      c("DADA2-NB", "MetaScope"), 
+      c("MetaScope", "MetaScope Priors"),                                
+      c("MetaScope Priors", "MetaBlast")),
+    method = "wilcox.test", 
+    paired = TRUE,
+    symnum.args = list(
+      cutpoints = c(0, 0.0001, 0.001, 0.01, 0.05, Inf), 
+      symbols = c("****", "***", "**", "*", "ns")))
   
 p_bar_with_stats
 
